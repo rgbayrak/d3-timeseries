@@ -7,6 +7,7 @@ import {
   fetchSubjects,
   fetchScans,
   fetchTasks,
+  fetchRuns,
   fetchPhysioRaw,
   fetchConfounds,
   toDataPoints,
@@ -22,6 +23,8 @@ import type { SQIResults, ChannelMetrics } from '@/data/sqi-metrics';
 const subjectSelect = document.getElementById('subject-select') as HTMLSelectElement;
 const sessionSelect = document.getElementById('session-select') as HTMLSelectElement;
 const taskSelect = document.getElementById('task-select') as HTMLSelectElement;
+const runSelect = document.getElementById('run-select') as HTMLSelectElement;
+const runLabel = document.getElementById('run-label') as HTMLLabelElement;
 const channelSelect = document.getElementById('channel-select') as HTMLSelectElement;
 const prevBtn = document.getElementById('prev-btn') as HTMLButtonElement;
 const nextBtn = document.getElementById('next-btn') as HTMLButtonElement;
@@ -46,6 +49,7 @@ let cachedSQI: SQIResults | null = null;
 let currentSub = '';
 let currentSes = '';
 let currentTask = '';
+let currentRun = '';
 
 let focusChart: ChartInstance | null = null;
 let contextChart: ChartInstance | null = null;
@@ -93,23 +97,23 @@ interface ColDef {
 }
 
 const sqiColumns: ColDef[] = [
-  { label: 'Channel', key: 'channelName', decimals: 0, description: 'Channel name from the physio file', group: 'always' },
-  { label: 'Mean', key: 'mean', decimals: 4, description: 'Arithmetic mean of all samples. Range: (-\u221E, +\u221E)', group: 'Basic' },
+  { label: 'Channel', key: 'channelName', decimals: 0, group: 'always' },
+  { label: 'Mean', key: 'mean', decimals: 4, group: 'Basic' },
   { label: 'Std Dev', key: 'stdDev', decimals: 4, description: 'Standard deviation (spread of values around the mean). Range: [0, +\u221E)', group: 'Basic' },
-  { label: 'Min', key: 'min', decimals: 4, description: 'Minimum sample value', group: 'Basic' },
-  { label: 'Max', key: 'max', decimals: 4, description: 'Maximum sample value', group: 'Basic' },
+  { label: 'Min', key: 'min', decimals: 4, group: 'Basic' },
+  { label: 'Max', key: 'max', decimals: 4, group: 'Basic' },
   { label: 'Median', key: 'median', decimals: 4, description: 'Middle value when samples are sorted', group: 'Basic' },
-  { label: '% Non-Zero', key: 'percentNonZero', decimals: 2, description: 'Percentage of samples that are not exactly zero. Range: [0, 100]', group: 'Basic' },
-  { label: 'SNR', key: 'snr', decimals: 3, description: 'Signal-to-noise ratio (mean / std dev). Higher is cleaner. Range: (-\u221E, +\u221E)', group: 'Distribution' },
-  { label: 'Kurtosis', key: 'kurtosis', decimals: 3, description: 'Excess kurtosis \u2014 tailedness of the distribution. 0 = normal, >0 = heavy tails, <0 = light tails. Range: [-2, +\u221E)', group: 'Distribution' },
-  { label: 'Skewness', key: 'skewness', decimals: 3, description: 'Asymmetry of the distribution. 0 = symmetric, >0 = right-skewed, <0 = left-skewed. Range: (-\u221E, +\u221E)', group: 'Distribution' },
-  { label: 'ZCR (Hz)', key: 'zeroCrossingRate', decimals: 2, description: 'Zero-crossing rate \u2014 number of sign changes per second. Higher values indicate higher-frequency content. Range: [0, +\u221E)', group: 'Distribution' },
-  { label: 'sVRI', key: 'svri', decimals: 3, description: 'Stress-induced Vascular Response Index \u2014 ratio of mean post- to pre-systolic amplitude, averaged across beats (PaPaGei). Range: (0, +\u221E)', group: 'PaPaGei' },
-  { label: 'IPA', key: 'ipa', decimals: 3, description: 'Inflection Point Area ratio \u2014 systolic area / diastolic area split at dicrotic notch, averaged across beats (PaPaGei). Range: (0, +\u221E)', group: 'PaPaGei' },
+  { label: '% Non-Zero', key: 'percentNonZero', decimals: 2, description: 'Percentage of samples that are not exactly zero.', group: 'Basic' },
+  { label: 'SNR', key: 'snr', decimals: 3, description: 'Signal-to-noise ratio (mean / std dev). Higher is cleaner.', group: 'Distribution' },
+  { label: 'Kurtosis', key: 'kurtosis', decimals: 3, description: 'Excess kurtosis \u2014 tailedness of the distribution. 0 = normal, >0 = heavy tails, <0 = light tails.', group: 'Distribution' },
+  { label: 'Skewness', key: 'skewness', decimals: 3, description: 'Asymmetry of the distribution. 0 = symmetric, >0 = right-skewed, <0 = left-skewed.', group: 'Distribution' },
+  { label: 'ZCR (Hz)', key: 'zeroCrossingRate', decimals: 2, description: 'Zero-crossing rate \u2014 number of sign changes per second. Higher values indicate higher-frequency content.', group: 'Distribution' },
+  { label: 'sVRI', key: 'svri', decimals: 3, description: 'Stress-induced Vascular Response Index \u2014 ratio of mean post- to pre-systolic amplitude, averaged across beats (PaPaGei).', group: 'PaPaGei' },
+  { label: 'IPA', key: 'ipa', decimals: 3, description: 'Inflection Point Area ratio \u2014 systolic area / diastolic area split at dicrotic notch, averaged across beats (PaPaGei).', group: 'PaPaGei' },
   { label: 'SQI', key: 'sqi', decimals: 3, description: 'Signal Quality Index \u2014 mean skewness over 5-second windows (PaPaGei). Range: (-\u221E, +\u221E)', group: 'PaPaGei' },
-  { label: 'Kurt (win)', key: 'kurtosisWindowed', decimals: 3, description: 'Mean excess kurtosis over 60 s windows (Elgendi 2016). Cardiac/PPG only.', group: 'PhysioQC' },
-  { label: 'ApEn', key: 'approxEntropy', decimals: 4, description: 'Approximate entropy \u2014 signal regularity (Elgendi 2016, m=2, r=0.2\u00D7SD). Lower = more regular. Cardiac/PPG only.', group: 'PhysioQC' },
-  { label: 'Beat Corr', key: 'beatCorrelation', decimals: 3, description: 'Mean Pearson correlation of each beat/breath vs average waveform (Romano 2023). Cardiac + respiratory.', group: 'PhysioQC' },
+  { label: 'Kurt (win)', key: 'kurtosisWindowed', decimals: 3, description: 'Mean excess kurtosis over 60 s windows (Elgendi 2016).', group: 'PhysioQC' },
+  { label: 'ApEn', key: 'approxEntropy', decimals: 4, description: 'Approximate entropy \u2014 signal regularity (Elgendi 2016, m=2, r=0.2\u00D7SD). Lower = more regular.', group: 'PhysioQC' },
+  { label: 'Beat Corr', key: 'beatCorrelation', decimals: 3, description: 'Mean Pearson correlation of each beat/breath vs average waveform (Romano 2023).', group: 'PhysioQC' },
 ];
 
 const sqiGroups = ['Basic', 'Distribution', 'PaPaGei', 'PhysioQC'];
@@ -253,6 +257,18 @@ function populateSelect(el: HTMLSelectElement, values: string[], selected?: stri
 async function populateTasks(sub: string, ses: string, selected?: string) {
   const tasks = await fetchTasks(sub, ses);
   populateSelect(taskSelect, tasks, selected ?? tasks[0]);
+}
+
+async function populateRuns(sub: string, ses: string, task: string, selected?: string) {
+  const runs = await fetchRuns(sub, ses, task);
+  if (runs.length > 0) {
+    populateSelect(runSelect, runs, selected ?? runs[0]);
+    runLabel.style.display = '';
+  } else {
+    runSelect.innerHTML = '';
+    runLabel.style.display = 'none';
+  }
+  return runs;
 }
 
 // ── Teardown ────────────────────────────────────────────
@@ -750,8 +766,8 @@ function buildConfoundsChart(confounds: ConfoundsRaw, raw: PhysioRaw) {
 }
 
 // ── Data loading ────────────────────────────────────────
-async function loadPhysio(sub: string, ses: string, task: string) {
-  if (sub === currentSub && ses === currentSes && task === currentTask && cachedRaw) {
+async function loadPhysio(sub: string, ses: string, task: string, run: string) {
+  if (sub === currentSub && ses === currentSes && task === currentTask && run === currentRun && cachedRaw) {
     buildCharts(cachedRaw, channelSelect.value);
     if (cachedConfounds) buildConfoundsChart(cachedConfounds, cachedRaw);
     else confoundsSectionEl.style.display = 'none';
@@ -766,8 +782,8 @@ async function loadPhysio(sub: string, ses: string, task: string) {
   setLoading('Loading...');
   try {
     const [physioRaw, confoundsRaw] = await Promise.all([
-      fetchPhysioRaw(sub, ses, task),
-      fetchConfounds(sub, ses, task),
+      fetchPhysioRaw(sub, ses, task, run),
+      fetchConfounds(sub, ses, task, run),
     ]);
 
     cachedRaw = physioRaw;
@@ -775,6 +791,7 @@ async function loadPhysio(sub: string, ses: string, task: string) {
     currentSub = sub;
     currentSes = ses;
     currentTask = task;
+    currentRun = run;
 
     filenameEl.textContent = cachedRaw.filename;
     renderQualityBadges(cachedRaw);
@@ -803,16 +820,23 @@ subjectSelect.addEventListener('change', async () => {
   if (!info) return;
   populateSelect(sessionSelect, info.sessions);
   await populateTasks(sub, sessionSelect.value);
-  loadPhysio(sub, sessionSelect.value, taskSelect.value);
+  await populateRuns(sub, sessionSelect.value, taskSelect.value);
+  loadPhysio(sub, sessionSelect.value, taskSelect.value, runSelect.value ?? '');
 });
 
 sessionSelect.addEventListener('change', async () => {
   await populateTasks(subjectSelect.value, sessionSelect.value);
-  loadPhysio(subjectSelect.value, sessionSelect.value, taskSelect.value);
+  await populateRuns(subjectSelect.value, sessionSelect.value, taskSelect.value);
+  loadPhysio(subjectSelect.value, sessionSelect.value, taskSelect.value, runSelect.value ?? '');
 });
 
-taskSelect.addEventListener('change', () => {
-  loadPhysio(subjectSelect.value, sessionSelect.value, taskSelect.value);
+taskSelect.addEventListener('change', async () => {
+  await populateRuns(subjectSelect.value, sessionSelect.value, taskSelect.value);
+  loadPhysio(subjectSelect.value, sessionSelect.value, taskSelect.value, runSelect.value ?? '');
+});
+
+runSelect.addEventListener('change', () => {
+  loadPhysio(subjectSelect.value, sessionSelect.value, taskSelect.value, runSelect.value ?? '');
 });
 
 channelSelect.addEventListener('change', () => {
@@ -827,7 +851,8 @@ async function goToScan(scan: ScanEntry) {
   const info = subjects.find((s) => s.id === scan.sub)!;
   populateSelect(sessionSelect, info.sessions, scan.ses);
   await populateTasks(scan.sub, scan.ses, scan.task);
-  loadPhysio(scan.sub, scan.ses, scan.task);
+  await populateRuns(scan.sub, scan.ses, scan.task, scan.run);
+  loadPhysio(scan.sub, scan.ses, scan.task, scan.run);
 }
 
 async function stepScan(delta: number) {
@@ -835,7 +860,8 @@ async function stepScan(delta: number) {
     (s) =>
       s.sub === subjectSelect.value &&
       s.ses === sessionSelect.value &&
-      s.task === taskSelect.value,
+      s.task === taskSelect.value &&
+      s.run === (runSelect.value ?? ''),
   );
   const next = allScans[(curIdx + delta + allScans.length) % allScans.length];
   await goToScan(next);
@@ -892,6 +918,7 @@ searchInput.addEventListener('keydown', async (e) => {
   const firstInfo = subjects.find((s) => s.id === first.sub)!;
   populateSelect(sessionSelect, firstInfo.sessions, first.ses);
   await populateTasks(first.sub, first.ses, first.task);
+  await populateRuns(first.sub, first.ses, first.task, first.run);
 
-  await loadPhysio(first.sub, first.ses, first.task);
+  await loadPhysio(first.sub, first.ses, first.task, first.run);
 })();

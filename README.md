@@ -13,18 +13,20 @@ npm run dev        # Vite dev server with hot reload
 
 Open the URL Vite prints (usually `http://localhost:5173`). The app loads a BIDS physiology dataset and presents an interactive viewer with:
 
-- **Controls** — Subject, Session, Task, and Channel dropdowns; Prev/Next buttons to step through scans in hierarchy order; search bar accepting `sub-03` or `ses-012` style input
+- **Controls** — Subject, Session, Task, Run (when present), and Channel dropdowns; Prev/Next buttons to step through scans in hierarchy order; search bar accepting `sub-03` or `ses-012` style input
 - **Filename display** — shows the exact `.tsv.gz` file being viewed
 - **Quality badges** — per-channel pass/fail indicators when a `_desc-quality.json` sidecar is present
-- **Focus chart** (top) — zoom with scroll wheel, pan with click-drag, hover for data readout
+- **Focus chart** (top) — drag to brush-select a time window (zooms on release), double-click to reset, auto-fits Y-axis to visible data; hover for data readout
 - **Context chart** (bottom) — drag the brush to navigate; handles resize the viewport
 - **Confounds chart** — framewise displacement (FD) from fMRIPrep, color-coded by severity (green/amber/red) with 0.2 mm and 0.5 mm reference lines
-- **Z-Score toggle** — normalize the displayed channel to zero-mean / unit-variance
+- **Channel persistence** — selected channel is preserved when stepping through scans with Prev/Next
 - **SQI table** — on-demand per-channel signal quality metrics (mean, std dev, SNR, kurtosis, skewness, zero-crossing rate, etc.)
 
 ### Other commands
 
 ```bash
+npm test           # vitest run (all tests)
+npm run test:watch # vitest in watch mode
 npm run typecheck  # tsc --noEmit (strict, no output)
 npm run build      # tsc + vite build
 ```
@@ -60,7 +62,8 @@ src/
 └── main.ts                 # Entry point (loads bids-physio-viewer)
 
 server/
-└── bids-physio-plugin.ts   # Vite dev server plugin (BIDS file reader API)
+├── bids-layout.ts          # Pure BIDS filesystem logic (testable, no Vite dependency)
+└── bids-physio-plugin.ts   # Thin Vite plugin wrapper importing from bids-layout
 ```
 
 ### Data pipeline
@@ -72,7 +75,7 @@ BIDS dataset on disk
   ↓  Returns compact column-array JSON via /api/bids/* endpoints
   ↓
 Browser (src/data/bids-physio-reader.ts)
-  ↓  fetchSubjects(), fetchScans(), fetchTasks(), fetchPhysioRaw(), fetchConfounds()
+  ↓  fetchSubjects(), fetchScans(), fetchTasks(), fetchRuns(), fetchPhysioRaw(), fetchConfounds()
   ↓  toDataPoints() / toFDPoints() materialize {time, value}[] arrays
   ↓
 SQI (src/data/sqi-metrics.ts)
@@ -87,10 +90,11 @@ Viewer (src/demos/bids-physio-viewer.ts)
 | Endpoint | Description |
 |---|---|
 | `GET /api/bids/subjects` | All subjects with their sessions (only those with readable physio files) |
-| `GET /api/bids/scans` | Flat list of every readable `{sub, ses, task}` in hierarchy order |
+| `GET /api/bids/scans` | Flat list of every readable `{sub, ses, task, run}` in hierarchy order |
 | `GET /api/bids/tasks?sub=&ses=` | Tasks available for a given subject/session |
-| `GET /api/bids/physio?sub=&ses=&task=` | Physio data as compact column arrays |
-| `GET /api/bids/confounds?sub=&ses=&task=` | Framewise displacement from fMRIPrep confounds TSV |
+| `GET /api/bids/runs?sub=&ses=&task=` | Runs available for a given subject/session/task |
+| `GET /api/bids/physio?sub=&ses=&task=&run=` | Physio data as compact column arrays |
+| `GET /api/bids/confounds?sub=&ses=&task=&run=` | Framewise displacement from fMRIPrep confounds TSV |
 
 The server skips broken symlinks (e.g. DataLad/git-annex files that haven't been fetched) using `accessSync(R_OK)`.
 
@@ -98,7 +102,7 @@ Confounds are read from the derivatives root (`BIDSDER_ROOT` env var or the fall
 
 ### Switching datasets
 
-Set the `BIDS_ROOT` environment variable, or change the fallback path in `server/bids-physio-plugin.ts`. The server auto-discovers subjects, sessions, and tasks from the directory structure.
+Set the `BIDS_ROOT` environment variable, or change the fallback path in `server/bids-physio-plugin.ts`. The server auto-discovers subjects, sessions, tasks, and runs from the directory structure.
 
 ```bash
 BIDS_ROOT=/path/to/your/dataset BIDSDER_ROOT=/path/to/derivatives npm run dev
@@ -106,7 +110,7 @@ BIDS_ROOT=/path/to/your/dataset BIDSDER_ROOT=/path/to/derivatives npm run dev
 
 Requirements:
 
-- Standard BIDS layout: `sub-XX/ses-XX/func/*_physio.tsv.gz`
+- Standard BIDS layout: `sub-XX/ses-XX/func/*_physio.tsv.gz` or session-less `sub-XX/func/*_physio.tsv.gz`
 - JSON sidecar with `SamplingFrequency`, `StartTime`, `Columns` (per-file or top-level)
 - TSV can have a header row (auto-detected and skipped)
 
@@ -312,16 +316,14 @@ Only individual D3 modules (no monolithic `d3` package):
 
 - [ ] Add LTTB (Largest Triangle Three Buckets) downsampling as alternative to stride-based
 - [ ] Keyboard shortcuts for Prev/Next navigation (arrow keys)
-- [ ] Support `run-` entity in filenames for datasets with repeated tasks
+- [x] Support `run-` entity in filenames for datasets with repeated tasks
+- [x] Parameterized test suite for BIDS layout functions (works with any BIDS dataset)
+- [x] Unit tests for `bids-physio-reader.ts` transform functions
 - [ ] Production build — the server plugin only works in Vite dev mode; would need an Express/Fastify server for production
-- [ ] Add unit tests for `bids-physio-reader.ts` extent/conversion functions
+- [ ] Support alternative confounds column names (e.g. `*motion*` in ds006644 derivatives) — currently hardcoded to `framewise_displacement`
 - [ ] Persist last-viewed scan in localStorage so reloads resume where you left off
 - [ ] Implement physiological response functions: Birn et al. 2006/2008 (respiration effects on BOLD), Chang & Glover 2009 (cardiac/respiratory response functions)
 - [ ] Export SQI metric calculations as TSV
 - [ ] Add metrics from physioqc ([PR #44](https://github.com/physiopy/physioqc/pull/44)): Elgendi 2016 windowed kurtosis + approximate entropy (cardiac/PPG), Romano 2023 per-beat/breath correlation SQI (cardiac + respiratory)
-- [ ] enable channel selection and when certain ones selected, visuzalize them in a vertical stack as new figures
-- [ ] make zooming interaction happen on the main figures (both channel views and FD)
-- [ ] create a new tab add interactive summary scatter plots for summary sqi-metric (e.g. all sqi is shown for ppg in one color, rsp in another) 
-- ALWAYS 
-  - clean up spurious code, update readme
-  - explain the whole structure and walk me through each function
+- [ ] enable channel selection and when certain ones selected, visualize them in a vertical stack as new figures
+- [ ] create a new tab add interactive summary scatter plots for summary sqi-metric (e.g. all sqi is shown for ppg in one color, rsp in another)

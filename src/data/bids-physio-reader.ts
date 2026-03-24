@@ -27,6 +27,7 @@ export interface ScanEntry {
   sub: string;
   ses: string;
   task: string;
+  run: string;
 }
 
 export async function fetchSubjects(): Promise<SubjectInfo[]> {
@@ -47,13 +48,19 @@ export async function fetchTasks(sub: string, ses: string): Promise<string[]> {
   return json.tasks;
 }
 
-export async function fetchPhysioRaw(sub: string, ses: string, task: string): Promise<PhysioRaw> {
-  const res = await fetch(`/api/bids/physio?sub=${sub}&ses=${ses}&task=${task}`);
-  if (!res.ok) throw new Error(`Failed to fetch physio for sub-${sub} ses-${ses} task-${task}`);
+export async function fetchRuns(sub: string, ses: string, task: string): Promise<string[]> {
+  const res = await fetch(`/api/bids/runs?sub=${sub}&ses=${ses}&task=${task}`);
+  const json = await res.json();
+  return json.runs;
+}
+
+export async function fetchPhysioRaw(sub: string, ses: string, task: string, run: string): Promise<PhysioRaw> {
+  const res = await fetch(`/api/bids/physio?sub=${sub}&ses=${ses}&task=${task}&run=${run}`);
+  if (!res.ok) throw new Error(`Failed to fetch physio for sub-${sub} ses-${ses} task-${task} run-${run}`);
   return res.json();
 }
 
-export function toDataPoints(raw: PhysioRaw, channel: string, normalize?: boolean): DataPoint[] {
+export function toDataPoints(raw: PhysioRaw, channel: string): DataPoint[] {
   const colIdx = raw.columns.indexOf(channel);
   if (colIdx === -1) throw new Error(`Channel "${channel}" not found`);
 
@@ -62,21 +69,8 @@ export function toDataPoints(raw: PhysioRaw, channel: string, normalize?: boolea
   const dt = 1 / raw.samplingFrequency;
   const t0 = raw.startTime;
 
-  let mean = 0;
-  let std = 1;
-  if (normalize) {
-    let sum = 0;
-    for (let i = 0; i < col.length; i++) sum += col[i];
-    mean = sum / col.length;
-    let sumSq = 0;
-    for (let i = 0; i < col.length; i++) sumSq += (col[i] - mean) ** 2;
-    std = Math.sqrt(sumSq / col.length);
-    if (std === 0) { mean = 0; std = 1; } // avoid division by zero
-  }
-
   for (let i = 0; i < raw.numSamples; i++) {
-    const value = normalize ? (col[i] - mean) / std : col[i];
-    points[i] = { time: t0 + i * dt, value };
+    points[i] = { time: t0 + i * dt, value: col[i] };
   }
   return points;
 }
@@ -97,8 +91,9 @@ export async function fetchConfounds(
   sub: string,
   ses: string,
   task: string,
+  run: string,
 ): Promise<ConfoundsRaw | null> {
-  const res = await fetch(`/api/bids/confounds?sub=${sub}&ses=${ses}&task=${task}`);
+  const res = await fetch(`/api/bids/confounds?sub=${sub}&ses=${ses}&task=${task}&run=${run}`);
   if (!res.ok) return null;
   return res.json();
 }
@@ -117,30 +112,16 @@ export function toFDPoints(confounds: ConfoundsRaw, raw: PhysioRaw): DataPoint[]
   return points;
 }
 
-export function getValueExtent(raw: PhysioRaw, channel: string, normalize?: boolean): [number, number] {
+export function getValueExtent(raw: PhysioRaw, channel: string): [number, number] {
   const colIdx = raw.columns.indexOf(channel);
   if (colIdx === -1) throw new Error(`Channel "${channel}" not found`);
 
   const col = raw.data[colIdx];
-
-  let mean = 0;
-  let std = 1;
-  if (normalize) {
-    let sum = 0;
-    for (let i = 0; i < col.length; i++) sum += col[i];
-    mean = sum / col.length;
-    let sumSq = 0;
-    for (let i = 0; i < col.length; i++) sumSq += (col[i] - mean) ** 2;
-    std = Math.sqrt(sumSq / col.length);
-    if (std === 0) { mean = 0; std = 1; }
-  }
-
   let min = Infinity;
   let max = -Infinity;
   for (let i = 0; i < col.length; i++) {
-    const v = normalize ? (col[i] - mean) / std : col[i];
-    if (v < min) min = v;
-    if (v > max) max = v;
+    if (col[i] < min) min = col[i];
+    if (col[i] > max) max = col[i];
   }
   const pad = (max - min) * 0.02;
   return [min - pad, max + pad];
