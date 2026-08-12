@@ -125,6 +125,7 @@ Requirements:
 - **Base does NOT set domains from data** — chart types compute their own domains.
 - **Individual D3 modules** — `d3-scale`, `d3-axis`, `d3-selection`, etc. for tree-shaking. No monolithic `d3` import.
 - **Functional factory pattern** — no classes, composable, idiomatic D3.
+- **No component framework (Vue/React)** — vanilla D3+TS holds up as long as state stays centralized (a single object for current scan/selection/annotations) and render functions stay pure/redraw-from-state. Revisit only if hand-rolled DOM diff/patch logic becomes unavoidable, not because of codebase size alone.
 
 ---
 
@@ -319,7 +320,27 @@ Only individual D3 modules (no monolithic `d3` package):
 
 ## TODO / Improvements
 
-- [ ] Add LTTB (Largest Triangle Three Buckets) downsampling as alternative to stride-based
+### Annotations (Tab 1)
+
+- [x] Client-side brush-select + label + persist annotations (JSON per sub/ses/task/run/channel)
+- [ ] Port the annotation UI into the FastAPI + tabbed-shell architecture below once it lands (currently lives directly in the vanilla viewer, ahead of that work)
+- [ ] Wire `trial_type == "fix"` annotations to export compact mask run-length intervals for the Artifact Correction tab: `{ channel, sampling_rate, n_samples, mask_intervals: [[start_sample, end_sample], ...] }`
+
+### Planned: FastAPI backend + 3-tab shell
+
+- [ ] Scaffold FastAPI backend service (shared backend for tabs 2 & 3)
+- [ ] Add tabbed navigation shell: Visualization & Annotation / Summary Statistics / Artifact Correction
+- [ ] Tab 2 — Summary Statistics: new (non-SQI) computation + API contract, generation endpoint, interactive scatter/bar plots
+- [ ] Tab 3 — Artifact Correction: wrap the existing correction model in an endpoint; brush a window → request fix → visualize before/after signal
+- [ ] Tests for tabs 2 & 3
+
+### Performance
+
+- [ ] Downsample focus-chart line rendering — currently draws every raw sample in the visible domain (1M+ points at full zoom-out for 1000–5000 Hz recordings); only the context chart is downsampled today. Needs a min/max-per-bucket downsampler (a naive stride, like `viewportCulling.ts` uses now, would clip cardiac spikes), targeting ~2-4k rendered points at any zoom level
+- [ ] Cache parsed physio/confounds reads server-side — `server/bids-physio-plugin.ts` re-parses (sync gunzip + full TSV parse) on every request, even when revisiting a scan just seen; add an in-memory cache keyed by sub/ses/task/run
+
+### Other
+
 - [ ] Keyboard shortcuts for Prev/Next navigation (arrow keys)
 - [x] Support `run-` entity in filenames for datasets with repeated tasks
 - [x] Parameterized test suite for BIDS layout functions (works with any BIDS dataset)
@@ -330,5 +351,4 @@ Only individual D3 modules (no monolithic `d3` package):
 - [ ] Implement physiological response functions: Birn et al. 2006/2008 (respiration effects on BOLD), Chang & Glover 2009 (cardiac/respiratory response functions)
 - [ ] Export SQI metric calculations as TSV
 - [ ] Add metrics from physioqc ([PR #44](https://github.com/physiopy/physioqc/pull/44)): Elgendi 2016 windowed kurtosis + approximate entropy (cardiac/PPG), Romano 2023 per-beat/breath correlation SQI (cardiac + respiratory)
-- [ ] enable channel selection and when certain ones selected, visualize them in a vertical stack as new figures
-- [ ] create a new tab add interactive summary scatter plots for summary sqi-metric (e.g. all sqi is shown for ppg in one color, rsp in another)
+- [ ] Enable channel selection to visualize selected channels in a vertical stack as new figures
