@@ -334,21 +334,27 @@ Only individual D3 modules (no monolithic `d3` package):
 - [ ] Tab 3 — Artifact Correction: wrap the existing correction model in an endpoint; brush a window → request fix → visualize before/after signal
 - [ ] Tests for tabs 2 & 3
 
-### Performance
+### Performance & data pipeline
 
 - [ ] Downsample focus-chart line rendering — currently draws every raw sample in the visible domain (1M+ points at full zoom-out for 1000–5000 Hz recordings); only the context chart is downsampled today. Needs a min/max-per-bucket downsampler (a naive stride, like `viewportCulling.ts` uses now, would clip cardiac spikes), targeting ~2-4k rendered points at any zoom level
 - [ ] Cache parsed physio/confounds reads server-side — `server/bids-physio-plugin.ts` re-parses (sync gunzip + full TSV parse) on every request, even when revisiting a scan just seen; add an in-memory cache keyed by sub/ses/task/run
+- [ ] Support alternative confounds column names (e.g. `*motion*` in ds006644 derivatives) — currently hardcoded to `framewise_displacement`
+- [ ] Support custom signals those computations by convolving physiological response functions (Birn et al. 2006/2008 respiration-BOLD, Chang & Glover 2009 cardiac/respiratory response functions)
+- [ ] Production build — the server plugin only works in Vite dev mode; the FastAPI backend planned above should supersede this, otherwise would need an Express/Fastify server for production
 
-### Other
+### Viewer UX
 
 - [ ] Keyboard shortcuts for Prev/Next navigation (arrow keys)
+- [ ] Persist last-viewed scan in localStorage so reloads resume where you left off
+- [ ] Enable channel selection to visualize selected channels in a vertical stack as new figures
+
+### SQI metrics
+
+- [ ] Export SQI metric calculations as TSV
+- [x] Add metrics from physioqc ([PR #44](https://github.com/physiopy/physioqc/pull/44)): Elgendi 2016 windowed kurtosis + approximate entropy (cardiac/PPG), Romano 2023 per-beat/breath correlation SQI (cardiac + respiratory)
+
+### BIDS layout & testing
+
 - [x] Support `run-` entity in filenames for datasets with repeated tasks
 - [x] Parameterized test suite for BIDS layout functions (works with any BIDS dataset)
 - [x] Unit tests for `bids-physio-reader.ts` transform functions
-- [ ] Production build — the server plugin only works in Vite dev mode; would need an Express/Fastify server for production
-- [ ] Support alternative confounds column names (e.g. `*motion*` in ds006644 derivatives) — currently hardcoded to `framewise_displacement`
-- [ ] Persist last-viewed scan in localStorage so reloads resume where you left off
-- [ ] Implement physiological response functions: Birn et al. 2006/2008 (respiration effects on BOLD), Chang & Glover 2009 (cardiac/respiratory response functions)
-- [ ] Export SQI metric calculations as TSV
-- [ ] Add metrics from physioqc ([PR #44](https://github.com/physiopy/physioqc/pull/44)): Elgendi 2016 windowed kurtosis + approximate entropy (cardiac/PPG), Romano 2023 per-beat/breath correlation SQI (cardiac + respiratory)
-- [ ] Enable channel selection to visualize selected channels in a vertical stack as new figures
