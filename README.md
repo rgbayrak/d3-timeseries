@@ -21,6 +21,7 @@ Open the URL Vite prints (usually `http://localhost:5173`). The app loads a BIDS
 - **Confounds chart** — framewise displacement (FD) from fMRIPrep, color-coded by severity (green/amber/red) with 0.2 mm and 0.5 mm reference lines
 - **Channel persistence** — selected channel is preserved when stepping through scans with Prev/Next
 - **SQI table** — on-demand per-channel signal quality metrics (mean, std dev, SNR, kurtosis, skewness, zero-crossing rate, etc.)
+- **Annotations** — toggle Annotate mode, drag on the focus chart to mark and label a time window; annotations persist to disk per `{sub, ses, task, run, channel}` and reload automatically when you return to that scan
 
 ### Other commands
 
@@ -95,10 +96,14 @@ Viewer (src/demos/bids-physio-viewer.ts)
 | `GET /api/bids/runs?sub=&ses=&task=` | Runs available for a given subject/session/task |
 | `GET /api/bids/physio?sub=&ses=&task=&run=` | Physio data as compact column arrays |
 | `GET /api/bids/confounds?sub=&ses=&task=&run=` | Framewise displacement from fMRIPrep confounds TSV |
+| `GET /api/bids/annotations?sub=&ses=&task=&run=&channel=` | Stored annotations for a scan/channel, if any |
+| `POST /api/bids/annotations` | Saves (overwrites) annotations for a scan/channel |
 
 The server skips broken symlinks (e.g. DataLad/git-annex files that haven't been fetched) using `accessSync(R_OK)`.
 
 Confounds are read from the derivatives root (`BIDSDER_ROOT` env var or the fallback path in the plugin). The server looks for `*_desc-confounds_timeseries.tsv` and extracts the `framewise_displacement` column.
+
+Annotations are written as JSON files under `ANNOTATIONS_ROOT` (env var, default `data/annotations/` in the project root), one file per `{sub, ses, task, run, channel}`, mirroring the `sub-XX/ses-XX/` BIDS directory structure.
 
 ### Switching datasets
 
