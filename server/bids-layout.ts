@@ -1,6 +1,6 @@
-import { readdirSync, readFileSync, existsSync, accessSync, constants } from 'fs';
+import { readdirSync, readFileSync, existsSync, accessSync, constants, mkdirSync, writeFileSync } from 'fs';
 import { gunzipSync } from 'zlib';
-import { join } from 'path';
+import { join, dirname } from 'path';
 
 /** Matches physio .tsv.gz files (both _physio.tsv.gz and _desc-preproc_physio.tsv.gz) */
 const PHYSIO_GZ_RE = /_physio\.tsv\.gz$/;
@@ -241,6 +241,63 @@ export function readConfounds(bidsderRoot: string, sub: string, ses: string, tas
     numVolumes: fdValues.length,
     framewise_displacement: fdValues,
   };
+}
+
+export interface StoredAnnotation {
+  id: string;
+  onset_s: number;
+  duration_s: number;
+  trial_type: string;
+  start_sample: number;
+  end_sample: number;
+}
+
+export interface AnnotationsFile {
+  sub: string;
+  ses: string;
+  task: string;
+  run: string;
+  channel: string;
+  sampling_rate: number;
+  annotations: StoredAnnotation[];
+}
+
+function annotationsFilePath(
+  root: string,
+  sub: string,
+  ses: string,
+  task: string,
+  run: string,
+  channel: string,
+): string {
+  const dir = ses ? join(root, `sub-${sub}`, `ses-${ses}`) : join(root, `sub-${sub}`);
+  let base = ses ? `sub-${sub}_ses-${ses}_task-${task}` : `sub-${sub}_task-${task}`;
+  if (run) base += `_run-${run}`;
+  base += `_channel-${channel}_annotations.json`;
+  return join(dir, base);
+}
+
+export function readAnnotations(
+  root: string,
+  sub: string,
+  ses: string,
+  task: string,
+  run: string,
+  channel: string,
+): AnnotationsFile | null {
+  const filePath = annotationsFilePath(root, sub, ses, task, run, channel);
+  if (!isReadable(filePath)) return null;
+  try {
+    return JSON.parse(readFileSync(filePath, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+export function writeAnnotations(root: string, payload: AnnotationsFile): void {
+  const filePath = annotationsFilePath(root, payload.sub, payload.ses, payload.task, payload.run, payload.channel);
+  mkdirSync(dirname(filePath), { recursive: true });
+  writeFileSync(filePath, JSON.stringify(payload, null, 2));
 }
 
 export function buildScans(bidsRoot: string, subjects: SubjectInfo[]): ScanEntry[] {

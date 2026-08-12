@@ -148,6 +148,79 @@
       opacity: 0.6;
     }
 
+    #annotate-mode-btn {
+      font-size: 13px;
+      padding: 3px 12px;
+      cursor: pointer;
+      border: 1px solid #aaa;
+      border-radius: 4px;
+      background: #f5f5f5;
+    }
+
+    #annotate-mode-btn:hover {
+      background: #e8e8e8;
+    }
+
+    #annotate-mode-btn.active {
+      background: #e67e22;
+      color: #fff;
+      border-color: #c8690f;
+    }
+
+    #annotation-section {
+      max-width: 960px;
+      margin: 8px auto 12px;
+    }
+
+    #annotation-section h3 {
+      margin: 0 0 6px;
+      font-size: 13px;
+      color: #333;
+    }
+
+    .annotation-empty {
+      font-size: 12px;
+      color: #888;
+      font-style: italic;
+    }
+
+    .annotation-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      padding: 4px 8px;
+      border: 1px solid #f0c9a0;
+      background: #fdf3e7;
+      border-radius: 4px;
+      margin-bottom: 4px;
+    }
+
+    .annotation-range {
+      font-family: monospace;
+      color: #b5651d;
+      white-space: nowrap;
+    }
+
+    .annotation-text {
+      flex: 1;
+      color: #333;
+    }
+
+    .annotation-remove {
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      color: #a33;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0 4px;
+    }
+
+    .annotation-remove:hover {
+      color: #d00;
+    }
+
     #sqi-section {
       max-width: 960px;
       margin: 0 auto 12px;
@@ -336,6 +409,7 @@
     <input id="search-input" type="text" placeholder="e.g. sub-03 or ses-012">
     <span id="loading"></span>
     <button id="compute-sqi-btn" type="button">Compute SQI</button>
+    <button id="annotate-mode-btn" type="button">Annotate: Off</button>
   </div>
   <div id="filename"></div>
   <div id="quality-badges"></div>
@@ -349,6 +423,10 @@
   </div>
   <div id="focus-chart"></div>
   <div id="context-chart"></div>
+  <div id="annotation-section">
+    <h3>Annotations</h3>
+    <div id="annotation-list"></div>
+  </div>
   <div id="confounds-section" style="display:none;">
     <div id="confounds-label"></div>
     <div id="confounds-chart"></div>

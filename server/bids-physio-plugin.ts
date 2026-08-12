@@ -6,22 +6,28 @@ import {
   getRuns,
   readPhysio,
   readConfounds,
+  readAnnotations,
+  writeAnnotations,
   buildScans,
 } from './bids-layout';
+import type { AnnotationsFile } from './bids-layout';
 
 const BIDS_ROOT =
   process.env.BIDS_ROOT ??
   join(
     process.env.HOME ?? '',
-    'Documents/internal/data-label-modules/friends.physprep',
+    'Documents/internal/data-label-modules/data/friends.physprep',
   );
 
 const BIDSDER_ROOT =
   process.env.BIDSDER_ROOT ??
   join(
     process.env.HOME ?? '',
-    'Documents/internal/data-label-modules/friends.fmriprep',
+    'Documents/internal/data-label-modules/data/friends.fmriprep',
   );
+
+const ANNOTATIONS_ROOT =
+  process.env.ANNOTATIONS_ROOT ?? join(process.cwd(), 'data', 'annotations');
 
 export function bidsPhysioPlugin(): Plugin {
   let cachedSubjectsJson: string;
@@ -128,6 +134,54 @@ export function bidsPhysioPlugin(): Plugin {
 
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify(result));
+          return;
+        }
+
+        if (req.url?.startsWith('/api/bids/annotations')) {
+          if (req.method === 'GET') {
+            const url = new URL(req.url, 'http://localhost');
+            const sub = url.searchParams.get('sub');
+            const ses = url.searchParams.get('ses') ?? '';
+            const task = url.searchParams.get('task');
+            const run = url.searchParams.get('run') ?? '';
+            const channel = url.searchParams.get('channel');
+
+            if (!sub || !task || !channel) {
+              res.statusCode = 400;
+              res.end(JSON.stringify({ error: 'Missing sub, task, or channel parameter' }));
+              return;
+            }
+
+            const result = readAnnotations(ANNOTATIONS_ROOT, sub, ses, task, run, channel);
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(result ?? { sub, ses, task, run, channel, sampling_rate: 0, annotations: [] }));
+            return;
+          }
+
+          if (req.method === 'POST') {
+            let body = '';
+            req.on('data', (chunk) => { body += chunk; });
+            req.on('end', () => {
+              try {
+                const payload = JSON.parse(body) as AnnotationsFile;
+                if (!payload.sub || !payload.task || !payload.channel) {
+                  res.statusCode = 400;
+                  res.end(JSON.stringify({ error: 'Missing sub, task, or channel in payload' }));
+                  return;
+                }
+                writeAnnotations(ANNOTATIONS_ROOT, payload);
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ ok: true }));
+              } catch {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: 'Invalid annotation payload' }));
+              }
+            });
+            return;
+          }
+
+          res.statusCode = 405;
+          res.end(JSON.stringify({ error: 'Method not allowed' }));
           return;
         }
 

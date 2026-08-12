@@ -21,7 +21,7 @@ import {
  */
 
 const HOME = process.env.HOME ?? '';
-const BASE = join(HOME, 'Documents/internal/data-label-modules');
+const BASE = join(HOME, 'Documents/internal/data-label-modules/data');
 
 const datasets = [
   { name: 'friends',  root: join(BASE, 'friends.physprep') },

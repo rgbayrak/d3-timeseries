@@ -112,6 +112,48 @@ export function toFDPoints(confounds: ConfoundsRaw, raw: PhysioRaw): DataPoint[]
   return points;
 }
 
+export interface StoredAnnotation {
+  id: string;
+  onset_s: number;
+  duration_s: number;
+  trial_type: string;
+  start_sample: number;
+  end_sample: number;
+}
+
+export interface AnnotationsFile {
+  sub: string;
+  ses: string;
+  task: string;
+  run: string;
+  channel: string;
+  sampling_rate: number;
+  annotations: StoredAnnotation[];
+}
+
+export async function fetchAnnotations(
+  sub: string,
+  ses: string,
+  task: string,
+  run: string,
+  channel: string,
+): Promise<AnnotationsFile | null> {
+  const res = await fetch(
+    `/api/bids/annotations?sub=${sub}&ses=${ses}&task=${task}&run=${run}&channel=${encodeURIComponent(channel)}`,
+  );
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function saveAnnotations(payload: AnnotationsFile): Promise<void> {
+  const res = await fetch('/api/bids/annotations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error('Failed to save annotations');
+}
+
 export function getValueExtent(raw: PhysioRaw, channel: string): [number, number] {
   const colIdx = raw.columns.indexOf(channel);
   if (colIdx === -1) throw new Error(`Channel "${channel}" not found`);

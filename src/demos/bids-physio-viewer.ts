@@ -10,12 +10,14 @@ import {
   fetchRuns,
   fetchPhysioRaw,
   fetchConfounds,
+  fetchAnnotations,
+  saveAnnotations,
   toDataPoints,
   toFDPoints,
   getTimeExtent,
   getValueExtent,
 } from '@/data/bids-physio-reader';
-import type { SubjectInfo, ScanEntry, PhysioRaw, ConfoundsRaw, DataPoint } from '@/data/bids-physio-reader';
+import type { SubjectInfo, ScanEntry, PhysioRaw, ConfoundsRaw, DataPoint, AnnotationsFile } from '@/data/bids-physio-reader';
 import { computeSQI } from '@/data/sqi-metrics';
 import type { SQIResults, ChannelMetrics } from '@/data/sqi-metrics';
 
@@ -39,6 +41,8 @@ const sqiSectionEl = document.getElementById('sqi-section')!;
 const hideSqiBtn = document.getElementById('hide-sqi-btn') as HTMLButtonElement;
 const sqiTableContainer = document.getElementById('sqi-table-container')!;
 const sqiColControls = document.getElementById('sqi-col-controls')!;
+const annotateModeBtn = document.getElementById('annotate-mode-btn') as HTMLButtonElement;
+const annotationListEl = document.getElementById('annotation-list')!;
 
 // ── State ───────────────────────────────────────────────
 let subjects: SubjectInfo[] = [];
@@ -56,6 +60,107 @@ let contextChart: ChartInstance | null = null;
 let confoundsChart: ChartInstance | null = null;
 let zoomHandle: ZoomHandle | null = null;
 let brushHandle: BrushHandle | null = null;
+
+// ── Annotations ─────────────────────────────────────────
+interface Annotation {
+  id: string;
+  start: number;
+  end: number;
+  label: string;
+}
+
+let annotateMode = false;
+let annotations: Annotation[] = [];
+let annotationIdCounter = 0;
+
+function escapeHtml(str: string): string {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function renderAnnotationList() {
+  if (annotations.length === 0) {
+    annotationListEl.innerHTML = '<div class="annotation-empty">No annotations yet — enable Annotate mode and drag on the focus chart.</div>';
+    return;
+  }
+
+  let html = '';
+  for (const a of annotations) {
+    html += `<div class="annotation-item" data-id="${a.id}">
+      <span class="annotation-range">${a.start.toFixed(2)}s – ${a.end.toFixed(2)}s</span>
+      <span class="annotation-text">${escapeHtml(a.label)}</span>
+      <button type="button" class="annotation-remove" data-id="${a.id}">&times;</button>
+    </div>`;
+  }
+  annotationListEl.innerHTML = html;
+
+  annotationListEl.querySelectorAll<HTMLButtonElement>('.annotation-remove').forEach((btn) => {
+    btn.addEventListener('click', () => removeAnnotation(btn.dataset.id!));
+  });
+}
+
+// Set by buildCharts to reposition annotation boxes when the x-domain changes
+let drawAnnotations: () => void = () => {};
+
+function buildAnnotationsPayload(): AnnotationsFile {
+  const fs = cachedRaw?.samplingFrequency ?? 0;
+  return {
+    sub: currentSub,
+    ses: currentSes,
+    task: currentTask,
+    run: currentRun,
+    channel: channelSelect.value,
+    sampling_rate: fs,
+    annotations: annotations.map((a) => ({
+      id: a.id,
+      onset_s: a.start,
+      duration_s: a.end - a.start,
+      trial_type: a.label,
+      start_sample: Math.round(a.start * fs),
+      end_sample: Math.round(a.end * fs),
+    })),
+  };
+}
+
+function persistAnnotations() {
+  saveAnnotations(buildAnnotationsPayload()).catch((err) => {
+    console.error('Failed to save annotations', err);
+    setLoading('Failed to save annotation');
+  });
+}
+
+async function loadSavedAnnotations(sub: string, ses: string, task: string, run: string, channel: string) {
+  const stored = await fetchAnnotations(sub, ses, task, run, channel).catch(() => null);
+  if (!stored) return;
+
+  // Discard if the scan/channel changed while this request was in flight
+  if (sub !== currentSub || ses !== currentSes || task !== currentTask || run !== currentRun || channel !== channelSelect.value) {
+    return;
+  }
+
+  annotations = stored.annotations.map((a) => ({
+    id: a.id,
+    start: a.onset_s,
+    end: a.onset_s + a.duration_s,
+    label: a.trial_type,
+  }));
+  drawAnnotations();
+  renderAnnotationList();
+}
+
+function removeAnnotation(id: string) {
+  annotations = annotations.filter((a) => a.id !== id);
+  drawAnnotations();
+  renderAnnotationList();
+  persistAnnotations();
+}
+
+annotateModeBtn.addEventListener('click', () => {
+  annotateMode = !annotateMode;
+  annotateModeBtn.classList.toggle('active', annotateMode);
+  annotateModeBtn.textContent = annotateMode ? 'Annotate: On' : 'Annotate: Off';
+});
 
 // ── Helpers ─────────────────────────────────────────────
 function setLoading(msg: string) {
@@ -292,6 +397,9 @@ let syncConfoundsXDomain: ((domain: [number, number]) => void) | null = null;
 function buildCharts(raw: PhysioRaw, channel: string) {
   destroyCharts();
   syncConfoundsXDomain = null;
+  annotations = [];
+  drawAnnotations = () => {};
+  renderAnnotationList();
 
   const data = toDataPoints(raw, channel);
   const timeExtent = getTimeExtent(raw);
@@ -331,6 +439,8 @@ function buildCharts(raw: PhysioRaw, channel: string) {
   // Line paths
   const focusLayers = focusChart.getLayers();
   const contextLayers = contextChart.getLayers();
+
+  const annotationsGroup = focusLayers.content.append('g').attr('class', 'annotations-group');
 
   const focusLinePath = focusLayers.content
     .append('path')
@@ -373,6 +483,66 @@ function buildCharts(raw: PhysioRaw, channel: string) {
     focusLinePath.datum(visible).attr('d', lineGen);
   }
 
+  function drawAnnotationBoxes() {
+    const { x } = focusChart!.getScales();
+    const xScale = x as ScaleLinear<number, number>;
+    const height = focusChart!.getDimensions().innerHeight;
+
+    const sel = annotationsGroup
+      .selectAll<SVGGElement, Annotation>('g.annotation')
+      .data(annotations, (d) => d.id);
+
+    sel.exit().remove();
+
+    const entered = sel
+      .enter()
+      .append('g')
+      .attr('class', 'annotation');
+
+    entered
+      .append('rect')
+      .attr('fill', 'rgba(230,126,34,0.12)')
+      .attr('stroke', 'rgba(230,126,34,0.6)')
+      .attr('stroke-width', 1)
+      .attr('pointer-events', 'none');
+
+    entered
+      .append('text')
+      .attr('fill', '#b5651d')
+      .attr('font-size', 11)
+      .attr('y', 12)
+      .attr('pointer-events', 'none');
+
+    const merged = entered.merge(sel);
+
+    merged
+      .select<SVGRectElement>('rect')
+      .attr('x', (d) => xScale(d.start))
+      .attr('width', (d) => Math.max(0, xScale(d.end) - xScale(d.start)))
+      .attr('y', 0)
+      .attr('height', height);
+
+    merged
+      .select<SVGTextElement>('text')
+      .attr('x', (d) => xScale(d.start) + 4)
+      .text((d) => d.label);
+  }
+  drawAnnotations = drawAnnotationBoxes;
+
+  function addAnnotation(domain: [number, number]) {
+    const label = window.prompt('Annotation label (e.g. "fix" to mark for reconstruction):', '');
+    if (label === null) return; // user cancelled — discard selection
+    annotations.push({
+      id: `ann-${Date.now()}-${annotationIdCounter++}`,
+      start: domain[0],
+      end: domain[1],
+      label: label.trim() || '(untitled)',
+    });
+    drawAnnotationBoxes();
+    renderAnnotationList();
+    persistAnnotations();
+  }
+
   function drawContextLine() {
     const { x, y } = contextChart!.getScales();
 
@@ -384,6 +554,7 @@ function buildCharts(raw: PhysioRaw, channel: string) {
   }
 
   drawFocusLine();
+  drawAnnotationBoxes();
   drawContextLine();
   contextChart.on('resize', drawContextLine);
 
@@ -395,6 +566,7 @@ function buildCharts(raw: PhysioRaw, channel: string) {
     resetDuration: 300,
     onZoom(xDomain) {
       drawFocusLine();
+      drawAnnotationBoxes();
       brushHandle!.moveTo(xDomain);
       syncConfoundsXDomain?.(xDomain);
     },
@@ -406,6 +578,7 @@ function buildCharts(raw: PhysioRaw, channel: string) {
       if (!selection) return;
       zoomHandle!.zoomToDomain(selection);
       drawFocusLine();
+      drawAnnotationBoxes();
       syncConfoundsXDomain?.(selection);
     },
   });
@@ -456,6 +629,8 @@ function buildCharts(raw: PhysioRaw, channel: string) {
         .attr('x', mx)
         .attr('width', 0)
         .attr('height', focusChart!.getDimensions().innerHeight)
+        .attr('fill', annotateMode ? 'rgba(230,126,34,0.15)' : 'rgba(0,119,190,0.15)')
+        .attr('stroke', annotateMode ? 'rgba(230,126,34,0.5)' : 'rgba(0,119,190,0.4)')
         .style('display', null);
     })
     .on('mousemove.brush', (event: MouseEvent) => {
@@ -482,8 +657,15 @@ function buildCharts(raw: PhysioRaw, channel: string) {
         (x as ScaleLinear<number, number>).invert(x0),
         (x as ScaleLinear<number, number>).invert(x1),
       ];
+
+      if (annotateMode) {
+        addAnnotation(domain);
+        return;
+      }
+
       zoomHandle!.zoomToDomain(domain);
       drawFocusLine();
+      drawAnnotationBoxes();
       brushHandle!.moveTo(domain);
       syncConfoundsXDomain?.(domain);
     });
@@ -537,7 +719,10 @@ function buildCharts(raw: PhysioRaw, channel: string) {
   // Resize: redraw focus line
   focusChart.on('resize', () => {
     drawFocusLine();
+    drawAnnotationBoxes();
   });
+
+  loadSavedAnnotations(currentSub, currentSes, currentTask, currentRun, channel);
 }
 
 // ── Build confounds (FD) chart ──────────────────────────
