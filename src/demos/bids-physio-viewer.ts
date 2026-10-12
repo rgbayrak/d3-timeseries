@@ -47,6 +47,9 @@ const sqiTableContainer = document.getElementById('sqi-table-container')!;
 const sqiColControls = document.getElementById('sqi-col-controls')!;
 const annotateModeBtn = document.getElementById('annotate-mode-btn') as HTMLButtonElement;
 const annotationListEl = document.getElementById('annotation-list')!;
+const stackRowEl = document.getElementById('stack-row')!;
+const stackChannelsEl = document.getElementById('stack-channels')!;
+const stackSectionEl = document.getElementById('stack-section')!;
 
 // ── State ───────────────────────────────────────────────
 let subjects: SubjectInfo[] = [];
@@ -64,6 +67,10 @@ let contextChart: ChartInstance | null = null;
 let confoundsChart: ChartInstance | null = null;
 let zoomHandle: ZoomHandle | null = null;
 let brushHandle: BrushHandle | null = null;
+
+/** Extra channels drawn as compact figures below the main focus chart */
+let stackedChannels: string[] = [];
+let stackCharts: ChartInstance[] = [];
 
 // ── Annotations ─────────────────────────────────────────
 interface Annotation {
@@ -443,10 +450,34 @@ function destroyCharts() {
   focusChart = null;
   contextChart = null;
   confoundsChart = null;
+  destroyStackCharts();
 }
 
 // Callback for confounds zoom sync — set by buildConfoundsChart
 let syncConfoundsXDomain: ((domain: [number, number]) => void) | null = null;
+// Callback for stacked-channel zoom sync — set by buildStackCharts
+let syncStackXDomain: ((domain: [number, number]) => void) | null = null;
+
+/** Push the focus chart's x window to every chart that follows it */
+function syncLinkedXDomain(domain: [number, number]) {
+  syncConfoundsXDomain?.(domain);
+  syncStackXDomain?.(domain);
+}
+
+/** Fit a chart's y domain to the visible samples (5% padding) */
+function fitYToVisible(chart: ChartInstance, visible: DataPoint[]) {
+  if (visible.length === 0) return;
+  let vMin = Infinity;
+  let vMax = -Infinity;
+  for (let i = 0; i < visible.length; i++) {
+    const v = visible[i].value;
+    if (v < vMin) vMin = v;
+    if (v > vMax) vMax = v;
+  }
+  const pad = (vMax - vMin) * 0.05 || 0.1;
+  (chart.getScales().y as ScaleLinear<number, number>).domain([vMin - pad, vMax + pad]);
+  chart.renderAxesAndGrid();
+}
 
 // ── Build charts ────────────────────────────────────────
 /**
@@ -560,18 +591,7 @@ function buildCharts(raw: PhysioRaw, channel: string) {
     const visible = cullToViewport(data, xDomain, (d: DataPoint) => d.time);
 
     // Auto-fit Y to visible data
-    if (visible.length > 0) {
-      let vMin = Infinity;
-      let vMax = -Infinity;
-      for (let i = 0; i < visible.length; i++) {
-        const v = visible[i].value;
-        if (v < vMin) vMin = v;
-        if (v > vMax) vMax = v;
-      }
-      const pad = (vMax - vMin) * 0.05 || 0.1;
-      (y as ScaleLinear<number, number>).domain([vMin - pad, vMax + pad]);
-      focusChart!.renderAxesAndGrid();
-    }
+    fitYToVisible(focusChart!, visible);
 
     const lineGen = line<DataPoint>()
       .x((d) => (x as ScaleLinear<number, number>)(d.time))
@@ -667,7 +687,7 @@ function buildCharts(raw: PhysioRaw, channel: string) {
       drawFocusLine();
       drawAnnotationBoxes();
       brushHandle!.moveTo(xDomain);
-      syncConfoundsXDomain?.(xDomain);
+      syncLinkedXDomain(xDomain);
     },
   });
 
@@ -678,7 +698,7 @@ function buildCharts(raw: PhysioRaw, channel: string) {
       zoomHandle!.zoomToDomain(selection);
       drawFocusLine();
       drawAnnotationBoxes();
-      syncConfoundsXDomain?.(selection);
+      syncLinkedXDomain(selection);
     },
   });
 
@@ -766,7 +786,7 @@ function buildCharts(raw: PhysioRaw, channel: string) {
       drawFocusLine();
       drawAnnotationBoxes();
       brushHandle!.moveTo(domain);
-      syncConfoundsXDomain?.(domain);
+      syncLinkedXDomain(domain);
     });
 
   zoomRect
@@ -1082,10 +1102,199 @@ function buildConfoundsChart(confounds: ConfoundsRaw, raw: PhysioRaw) {
   confoundsChart.on('resize', drawConfoundLine);
 }
 
+// ── Stacked channels ────────────────────────────────────
+function destroyStackCharts() {
+  for (const c of stackCharts) c.destroy();
+  stackCharts = [];
+  syncStackXDomain = null;
+  stackSectionEl.innerHTML = '';
+  stackSectionEl.style.display = 'none';
+}
+
+/** One checkbox per channel except the main one shown in the focus chart */
+function renderStackControls(columns: string[]) {
+  const mainChannel = channelSelect.value;
+  stackedChannels = stackedChannels.filter((c) => c !== mainChannel && columns.includes(c));
+
+  stackChannelsEl.innerHTML = '';
+  const options = columns.filter((c) => c !== mainChannel);
+  stackRowEl.style.display = options.length > 0 ? '' : 'none';
+
+  for (const ch of options) {
+    const label = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = stackedChannels.includes(ch);
+    cb.addEventListener('change', () => {
+      // Keep the stack in column order regardless of click order
+      const checked = new Set(stackedChannels);
+      if (cb.checked) checked.add(ch);
+      else checked.delete(ch);
+      stackedChannels = columns.filter((c) => checked.has(c));
+      if (cachedRaw) buildStackCharts(cachedRaw);
+      saveLastViewed();
+    });
+    label.append(cb, ch);
+    stackChannelsEl.appendChild(label);
+  }
+}
+
+/**
+ * Compact figure per stacked channel. Each follows the focus chart's x window
+ * (via syncLinkedXDomain) and auto-fits its y-axis to the visible samples.
+ */
+function buildStackCharts(raw: PhysioRaw) {
+  destroyStackCharts();
+  if (stackedChannels.length === 0) return;
+  stackSectionEl.style.display = '';
+
+  // Start at the focus chart's current window so the stack lines up with it
+  const xDomain = focusChart
+    ? ((focusChart.getScales().x as ScaleLinear<number, number>).domain() as [number, number])
+    : getViewExtent(raw);
+
+  const redrawers: (() => void)[] = [];
+
+  for (const channel of stackedChannels) {
+    const data = toDataPoints(raw, channel);
+    if (data.length === 0) continue;
+
+    const el = document.createElement('div');
+    el.className = 'stack-chart';
+    stackSectionEl.appendChild(el);
+
+    const chart = createChart({
+      container: el,
+      width: 960,
+      height: 140,
+      // Same left/right margins as the focus chart so the time axes line up
+      margin: { top: 10, right: 20, bottom: 30, left: 60 },
+      xScale: { type: 'linear', domain: xDomain },
+      yScale: { type: 'linear', domain: getValueExtent(raw, channel), nice: true },
+      xAxis: { position: 'bottom', tickCount: 5 },
+      yAxis: { position: 'left', label: channel },
+      grid: {
+        x: { strokeColor: '#e0e0e0', opacity: 0.5 },
+        y: { strokeColor: '#e0e0e0', opacity: 0.5 },
+      },
+      tooltip: { enabled: true },
+      resize: { enabled: true, debounceMs: 100 },
+    });
+    stackCharts.push(chart);
+
+    const layers = chart.getLayers();
+    const linePath = layers.content
+      .append('path')
+      .attr('fill', 'none')
+      .attr('stroke', '#2d8a8e')
+      .attr('stroke-width', 1.2);
+    const onsetGroup = layers.content.append('g').attr('class', 'onset-marker');
+
+    function draw() {
+      const { x, y } = chart.getScales();
+      const domain = (x as ScaleLinear<number, number>).domain() as [number, number];
+      const visible = cullToViewport(data, domain, (d: DataPoint) => d.time);
+      fitYToVisible(chart, visible);
+
+      const lineGen = line<DataPoint>()
+        .x((d) => (x as ScaleLinear<number, number>)(d.time))
+        .y((d) => (y as ScaleLinear<number, number>)(d.value));
+      linePath.datum(visible).attr('d', lineGen);
+      drawOnsetMarker(chart, onsetGroup, false);
+    }
+
+    draw();
+    redrawers.push(draw);
+
+    // Hover
+    const hoverLine = layers.overlay
+      .append('line')
+      .attr('stroke', '#666')
+      .attr('stroke-dasharray', '4 4')
+      .attr('pointer-events', 'none')
+      .style('opacity', 0);
+
+    const hoverCircle = layers.overlay
+      .append('circle')
+      .attr('r', 3)
+      .attr('fill', '#2d8a8e')
+      .attr('stroke', 'white')
+      .attr('stroke-width', 1.5)
+      .attr('pointer-events', 'none')
+      .style('opacity', 0);
+
+    const dims = chart.getDimensions();
+    const overlayRect = layers.overlay
+      .append('rect')
+      .attr('width', dims.innerWidth)
+      .attr('height', dims.innerHeight)
+      .attr('fill', 'transparent')
+      .attr('cursor', 'crosshair');
+
+    overlayRect
+      .on('mousemove', (event: MouseEvent) => {
+        const { x, y } = chart.getScales();
+        const d = chart.getDimensions();
+        const [mx] = pointer(event, overlayRect.node()!);
+        const hoveredTime = (x as ScaleLinear<number, number>).invert(mx);
+
+        // Binary search for nearest sample
+        let lo = 0;
+        let hi = data.length - 1;
+        while (hi - lo > 1) {
+          const mid = (lo + hi) >> 1;
+          if (data[mid].time < hoveredTime) lo = mid;
+          else hi = mid;
+        }
+        const nearest =
+          Math.abs(data[lo].time - hoveredTime) < Math.abs(data[hi].time - hoveredTime)
+            ? data[lo]
+            : data[hi];
+
+        const cx = (x as ScaleLinear<number, number>)(nearest.time);
+        const cy = (y as ScaleLinear<number, number>)(nearest.value);
+
+        hoverLine
+          .attr('x1', cx)
+          .attr('x2', cx)
+          .attr('y1', 0)
+          .attr('y2', d.innerHeight)
+          .style('opacity', 1);
+
+        hoverCircle.attr('cx', cx).attr('cy', cy).style('opacity', 1);
+
+        chart.getTooltip()?.show(
+          `<div><strong>${nearest.time.toFixed(3)} s</strong></div><div>${channel}: ${nearest.value.toFixed(2)}</div>`,
+          event.pageX,
+          event.pageY,
+        );
+      })
+      .on('mouseleave', () => {
+        hoverLine.style('opacity', 0);
+        hoverCircle.style('opacity', 0);
+        chart.getTooltip()?.hide();
+      });
+
+    chart.on('resize', () => {
+      const d = chart.getDimensions();
+      overlayRect.attr('width', d.innerWidth).attr('height', d.innerHeight);
+      draw();
+    });
+  }
+
+  syncStackXDomain = (domain: [number, number]) => {
+    stackCharts.forEach((chart, i) => {
+      (chart.getScales().x as ScaleLinear<number, number>).domain(domain);
+      redrawers[i]();
+    });
+  };
+}
+
 // ── Data loading ────────────────────────────────────────
 async function loadPhysio(sub: string, ses: string, task: string, run: string) {
   if (sub === currentSub && ses === currentSes && task === currentTask && run === currentRun && cachedRaw) {
     buildCharts(cachedRaw, channelSelect.value);
+    buildStackCharts(cachedRaw);
     if (cachedConfounds) buildConfoundsChart(cachedConfounds, cachedRaw);
     else confoundsSectionEl.style.display = 'none';
     if (cachedSQI) renderSQITable(cachedSQI);
@@ -1119,7 +1328,12 @@ async function loadPhysio(sub: string, ses: string, task: string, run: string) {
       [restoredSelection?.channel, channelSelect.value].find((c) => c && columns.includes(c)) ??
       columns[0];
     populateSelect(channelSelect, columns, preferredChannel);
+    // Stacked channels carry over the same way; renderStackControls drops
+    // any the new scan lacks
+    if (restoredSelection) stackedChannels = restoredSelection.stacked;
+    renderStackControls(columns);
     buildCharts(cachedRaw, channelSelect.value);
+    buildStackCharts(cachedRaw);
 
     if (cachedConfounds) {
       const confoundCols = Object.keys(cachedConfounds.columns);
@@ -1149,12 +1363,14 @@ async function loadPhysio(sub: string, ses: string, task: string, run: string) {
 interface LastViewed extends ScanEntry {
   channel: string;
   confound: string;
+  /** Absent in entries saved before stacked channels existed */
+  stacked?: string[];
 }
 
 /** Storage key; scoped per dataset (by name) once dataset info has loaded */
 let lastViewedKey = 'bids-physio-viewer:last-viewed';
-/** Channel/confound restored on reload, consumed by the first loadPhysio */
-let restoredSelection: { channel: string; confound: string } | null = null;
+/** Channel/confound/stack restored on reload, consumed by the first loadPhysio */
+let restoredSelection: { channel: string; confound: string; stacked: string[] } | null = null;
 
 function saveLastViewed() {
   if (!currentSub) return;
@@ -1165,6 +1381,7 @@ function saveLastViewed() {
     run: currentRun,
     channel: channelSelect.value,
     confound: confoundSelect.value,
+    stacked: stackedChannels,
   };
   try {
     localStorage.setItem(lastViewedKey, JSON.stringify(value));
@@ -1210,7 +1427,10 @@ runSelect.addEventListener('change', () => {
 
 channelSelect.addEventListener('change', () => {
   if (cachedRaw) {
+    // The new main channel leaves the stack options (and the stack, if checked)
+    renderStackControls(cachedRaw.columns);
     buildCharts(cachedRaw, channelSelect.value);
+    buildStackCharts(cachedRaw);
     if (cachedConfounds) buildConfoundsChart(cachedConfounds, cachedRaw);
   }
   saveLastViewed();
@@ -1315,7 +1535,13 @@ searchInput.addEventListener('keydown', async (e) => {
         (s) => s.sub === saved.sub && s.ses === saved.ses && s.task === saved.task && s.run === saved.run,
       )
     : undefined;
-  if (resumed && saved) restoredSelection = { channel: saved.channel, confound: saved.confound };
+  if (resumed && saved) {
+    restoredSelection = {
+      channel: saved.channel,
+      confound: saved.confound,
+      stacked: Array.isArray(saved.stacked) ? saved.stacked : [],
+    };
+  }
 
   const first = resumed ?? allScans[0];
   populateSelect(subjectSelect, subjects.map((s) => s.id), first.sub);

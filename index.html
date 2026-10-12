@@ -454,6 +454,35 @@
     #confounds-chart {
       max-width: 960px;
     }
+
+    /* Stacked channel picker (controls row) */
+    .stack-title {
+      font-size: 14px;
+    }
+
+    #stack-channels {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    #controls #stack-channels label {
+      font-size: 13px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    /* Stacked channel figures, one per checked channel */
+    #stack-section {
+      max-width: 960px;
+      margin: 12px auto 0;
+      border-top: 1px solid #ddd;
+      padding-top: 8px;
+    }
+
+    #stack-section .stack-chart {
+      max-width: 960px;
+    }
   </style>
 </head>
 <body>
@@ -465,6 +494,10 @@
       <label id="run-label" style="display:none">Run <select id="run-select"></select></label>
       <label>Channel <select id="channel-select"></select></label>
       <label id="confound-label" style="display:none">Confound <select id="confound-select"></select></label>
+    </div>
+    <div class="controls-row" id="stack-row" style="display:none">
+      <span class="stack-title">Stack</span>
+      <span id="stack-channels"></span>
     </div>
     <div class="controls-row">
       <button id="prev-btn" type="button" title="Previous scan (←)">&laquo; Prev</button>
@@ -494,6 +527,7 @@
     <h3>Annotations</h3>
     <div id="annotation-list"></div>
   </div>
+  <div id="stack-section" style="display:none;"></div>
   <div id="confounds-section" style="display:none;">
     <div id="confounds-label"></div>
     <div id="confounds-chart"></div>

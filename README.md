@@ -26,14 +26,15 @@ Optional: `git annex adjust --unlock` checks files out as regular files instead 
 
 Open the URL Vite prints (usually `http://localhost:5173`). The app loads a BIDS physiology dataset and presents an interactive viewer with:
 
-- **Controls** — three rows: Subject, Session, Task, Run (when present), Channel and Confound (when derivatives exist) dropdowns; Prev/Next buttons (or ←/→ keys) to step through scans in hierarchy order plus a search bar accepting `sub-03` or `ses-012` style input; Compute SQI and Annotate buttons
+- **Controls** — four rows: Subject, Session, Task, Run (when present), Channel and Confound (when derivatives exist) dropdowns; Stack checkboxes for extra channels; Prev/Next buttons (or ←/→ keys) to step through scans in hierarchy order plus a search bar accepting `sub-03` or `ses-012` style input; Compute SQI and Annotate buttons
 - **Dataset info** — name, authors, BIDS version, license, DOI link and derivatives pipeline/version, read from the dataset's own `dataset_description.json` (raw and derivatives); fields that are missing are skipped
 - **Filename display** — shows the exact `.tsv.gz` file being viewed
 - **Badges** — a timing badge (see [Timing alignment](#timing-alignment)) and per-channel pass/fail quality indicators when a `_desc-quality.json` sidecar is present (run-level, e.g. `*_run-01_desc-quality.json`, or run-less)
 - **Focus chart** (top) — drag to brush-select a time window (zooms on release), double-click to reset, auto-fits Y-axis to visible data; hover for data readout
 - **Context chart** (bottom) — drag the brush to navigate; handles resize the viewport
+- **Stacked channels** — tick channels in the Stack row to add a compact figure for each, stacked below the annotations; they follow the focus chart's time window (zoom, brush, double-click reset), auto-fit their Y-axis to visible data, and have their own hover readout
 - **Confounds chart** — pick a motion confound from the Confound dropdown (shown only when fMRIPrep derivatives exist); FD is color-coded by severity (green/amber/red) with 0.2 mm and 0.5 mm reference lines
-- **Channel persistence** — selected channel is preserved when stepping through scans with Prev/Next; a reload resumes the last-viewed scan, channel and confound (saved per dataset in the browser's localStorage)
+- **Channel persistence** — selected channel and stacked channels are preserved when stepping through scans with Prev/Next; a reload resumes the last-viewed scan, channel, stacked channels and confound (saved per dataset in the browser's localStorage)
 - **SQI table** — on-demand per-channel signal quality metrics (mean, std dev, SNR, kurtosis, skewness, zero-crossing rate, etc.)
 - **Annotations** — toggle Annotate mode, drag on the focus chart to mark and label a time window; annotations persist to disk per `{sub, ses, task, run, channel}` and reload automatically when you return to that scan
 
@@ -378,9 +379,11 @@ Only individual D3 modules (no monolithic `d3` package):
 
 ### Viewer UX
 
-- [x] Persist last-viewed scan (plus channel and confound) in localStorage so reloads resume where you left off
-- [ ] Enable channel selection to visualize selected channels in a vertical stack as new figures
+- [x] Enable channel selection to visualize selected channels in a vertical stack as new figures
 
 ### SQI metrics
 
 - [ ] Export SQI metric calculations as TSV
+
+### Misc
+- [ ] Write a function to convert mp4 to gif (this is for demo videos) 
