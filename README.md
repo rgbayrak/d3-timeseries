@@ -11,14 +11,28 @@ npm install
 npm run dev        # Vite dev server with hot reload
 ```
 
+### Getting the data
+
+```bash
+brew install git-annex
+uv tool install datalad
+datalad install -s https://github.com/OpenNeuroDatasets/ds006644.git data/ds006644
+cd data/ds006644
+datalad get sub-*/ses-*/func/*_physio.*
+datalad get derivatives/fmriprep/sub-*/ses-*/func/*_desc-confounds_timeseries.*
+```
+
+Optional: `git annex adjust --unlock` checks files out as regular files instead of symlinks. The viewer doesn't need it, but it helps with tools that don't follow symlinks.
+
 Open the URL Vite prints (usually `http://localhost:5173`). The app loads a BIDS physiology dataset and presents an interactive viewer with:
 
-- **Controls** — Subject, Session, Task, Run (when present), and Channel dropdowns; Prev/Next buttons to step through scans in hierarchy order; search bar accepting `sub-03` or `ses-012` style input
+- **Controls** — three rows: Subject, Session, Task, Run (when present), Channel and Confound (when derivatives exist) dropdowns; Prev/Next buttons to step through scans in hierarchy order plus a search bar accepting `sub-03` or `ses-012` style input; Compute SQI and Annotate buttons
+- **Dataset info** — name, authors, BIDS version, license, DOI link and derivatives pipeline/version, read from the dataset's own `dataset_description.json` (raw and derivatives); fields that are missing are skipped
 - **Filename display** — shows the exact `.tsv.gz` file being viewed
-- **Quality badges** — per-channel pass/fail indicators when a `_desc-quality.json` sidecar is present
+- **Badges** — a timing badge (see [Timing alignment](#timing-alignment)) and per-channel pass/fail quality indicators when a `_desc-quality.json` sidecar is present (run-level, e.g. `*_run-01_desc-quality.json`, or run-less)
 - **Focus chart** (top) — drag to brush-select a time window (zooms on release), double-click to reset, auto-fits Y-axis to visible data; hover for data readout
 - **Context chart** (bottom) — drag the brush to navigate; handles resize the viewport
-- **Confounds chart** — framewise displacement (FD) from fMRIPrep, color-coded by severity (green/amber/red) with 0.2 mm and 0.5 mm reference lines
+- **Confounds chart** — pick a motion confound from the Confound dropdown (shown only when fMRIPrep derivatives exist); FD is color-coded by severity (green/amber/red) with 0.2 mm and 0.5 mm reference lines
 - **Channel persistence** — selected channel is preserved when stepping through scans with Prev/Next
 - **SQI table** — on-demand per-channel signal quality metrics (mean, std dev, SNR, kurtosis, skewness, zero-crossing rate, etc.)
 - **Annotations** — toggle Annotate mode, drag on the focus chart to mark and label a time window; annotations persist to disk per `{sub, ses, task, run, channel}` and reload automatically when you return to that scan
@@ -76,8 +90,8 @@ BIDS dataset on disk
   ↓  Returns compact column-array JSON via /api/bids/* endpoints
   ↓
 Browser (src/data/bids-physio-reader.ts)
-  ↓  fetchSubjects(), fetchScans(), fetchTasks(), fetchRuns(), fetchPhysioRaw(), fetchConfounds()
-  ↓  toDataPoints() / toFDPoints() materialize {time, value}[] arrays
+  ↓  fetchDatasetInfo(), fetchSubjects(), fetchScans(), fetchTasks(), fetchRuns(), fetchPhysioRaw(), fetchConfounds()
+  ↓  toDataPoints() / toConfoundPoints() materialize {time, value}[] arrays
   ↓
 SQI (src/data/sqi-metrics.ts)
   ↓  computeSQI() — per-channel stats (mean, std, SNR, kurtosis, skewness, ZCR)
@@ -91,23 +105,43 @@ Viewer (src/demos/bids-physio-viewer.ts)
 | Endpoint | Description |
 |---|---|
 | `GET /api/bids/subjects` | All subjects with their sessions (only those with readable physio files) |
+| `GET /api/bids/dataset` | Dataset metadata from `dataset_description.json` (raw + derivatives `GeneratedBy`) |
 | `GET /api/bids/scans` | Flat list of every readable `{sub, ses, task, run}` in hierarchy order |
 | `GET /api/bids/tasks?sub=&ses=` | Tasks available for a given subject/session |
 | `GET /api/bids/runs?sub=&ses=&task=` | Runs available for a given subject/session/task |
-| `GET /api/bids/physio?sub=&ses=&task=&run=` | Physio data as compact column arrays |
-| `GET /api/bids/confounds?sub=&ses=&task=&run=` | Framewise displacement from fMRIPrep confounds TSV |
+| `GET /api/bids/physio?sub=&ses=&task=&run=` | Physio data as compact column arrays, plus the timing check result (`timing`) |
+| `GET /api/bids/confounds?sub=&ses=&task=&run=` | Motion confounds (FD, RMSD, DVARS, trans/rot) from fMRIPrep confounds TSV |
 | `GET /api/bids/annotations?sub=&ses=&task=&run=&channel=` | Stored annotations for a scan/channel, if any |
 | `POST /api/bids/annotations` | Saves (overwrites) annotations for a scan/channel |
 
 The server skips broken symlinks (e.g. DataLad/git-annex files that haven't been fetched) using `accessSync(R_OK)`.
 
-Confounds are read from the derivatives root (`BIDSDER_ROOT` env var or the fallback path in the plugin). The server looks for `*_desc-confounds_timeseries.tsv` and extracts the `framewise_displacement` column.
+Confounds are read from the derivatives root (`BIDSDER_ROOT` env var, default `$BIDS_ROOT/derivatives/fmriprep`). The server looks for `*_desc-confounds_timeseries.tsv[.gz]` and extracts the motion columns (`framewise_displacement`, `rmsd`, `dvars`, `std_dvars`, `trans_*`, `rot_*`); the **Confound** dropdown picks which one to plot and only appears when a confounds file is found.
+
+### Timing alignment
+
+All charts share one time axis: **t = 0 is scan onset**, the start of acquisition of the first BOLD volume. All charts start at t = 0, and their x-axis reads "Time from scan onset (s)". Physio recorded before the scan (negative times) is out of view. A dashed purple **scan onset (t = 0)** marker marks the start.
+
+- **Physio.** The physio sidecar's `StartTime` is the reference. Per BIDS, it is the time of the first physio sample relative to the first volume, so sample *i* sits at `StartTime + i / SamplingFrequency`. It is often negative because recording starts before the scan.
+- **Confounds.** fMRIPrep writes one confounds row per volume. Volume *i* sits at `VolumeTiming[i]`, or `i × RepetitionTime` if there is no `VolumeTiming`. The server looks for these in the raw BOLD sidecar (scan-level, then top-level `task-<task>_bold.json`), then in the derivatives' BOLD sidecars. If none of them has timing, volumes are spread evenly across the physio recording. That fallback is only approximate.
+- **Trigger check.** If the physio file has a `trigger` channel, the server detects its pulses (rising edges at the midpoint of the channel's range) and checks them against the sidecar timing. Triggers are a cross-check, not the reference: the first pulse is not assumed to be the first volume, because dummy scans, dropped pulses or recording delays can break that.
+
+The **Timing** badge above the chart shows the result. Hover over it to see the details.
+
+| Badge | Condition | What the viewer does |
+|---|---|---|
+| trigger-verified (green) | Every pulse interval is within 5% of TR, pulse count equals volume count, and the first pulse lands at t = 0 (within 5% of TR) | Uses `StartTime` as-is |
+| corrected from triggers (amber) | Pulses are clean (spacing and count match) but the first pulse is off from t = 0 | Shifts the physio axis so the first pulse is at t = 0 |
+| triggers disagree (red) | Some intervals differ from TR, or the pulse count doesn't match the volume count | Uses `StartTime` as-is and flags the scan for review |
+| sidecar only (amber) | No trigger channel or pulses, or no BOLD TR to check against | Uses `StartTime` as-is, unverified |
+
+In ds006644, 79 of 80 scans are trigger-verified. sub-18 ses-02 is flagged red: 21 of its pulse intervals differ from TR, the first being 0.704 s against 1.8 s.
 
 Annotations are written as JSON files under `ANNOTATIONS_ROOT` (env var, default `data/annotations/` in the project root), one file per `{sub, ses, task, run, channel}`, mirroring the `sub-XX/ses-XX/` BIDS directory structure.
 
 ### Switching datasets
 
-Set the `BIDS_ROOT` environment variable, or change the fallback path in `server/bids-physio-plugin.ts`. The server auto-discovers subjects, sessions, tasks, and runs from the directory structure.
+`BIDS_ROOT` defaults to `data/ds006644` in the project root; set it to use another dataset. The server auto-discovers subjects, sessions, tasks, and runs from the directory structure.
 
 ```bash
 BIDS_ROOT=/path/to/your/dataset BIDSDER_ROOT=/path/to/derivatives npm run dev
@@ -118,6 +152,8 @@ Requirements:
 - Standard BIDS layout: `sub-XX/ses-XX/func/*_physio.tsv.gz` or session-less `sub-XX/func/*_physio.tsv.gz`
 - JSON sidecar with `SamplingFrequency`, `StartTime`, `Columns` (per-file or top-level)
 - TSV can have a header row (auto-detected and skipped)
+- For confound timing: a BOLD sidecar with `VolumeTiming` or `RepetitionTime` (raw scan-level, top-level `task-<task>_bold.json`, or derivatives)
+- Run labels are compared as numbers between raw and derivatives, so `run-01` matches `run-1`
 
 ### Design principles
 
@@ -322,7 +358,6 @@ Only individual D3 modules (no monolithic `d3` package):
 
 ### Annotations (Tab 1)
 
-- [x] Client-side brush-select + label + persist annotations (JSON per sub/ses/task/run/channel)
 - [ ] Port the annotation UI into the FastAPI + tabbed-shell architecture below once it lands (currently lives directly in the vanilla viewer, ahead of that work)
 - [ ] Wire `trial_type == "fix"` annotations to export compact mask run-length intervals for the Artifact Correction tab: `{ channel, sampling_rate, n_samples, mask_intervals: [[start_sample, end_sample], ...] }`
 
@@ -338,7 +373,6 @@ Only individual D3 modules (no monolithic `d3` package):
 
 - [ ] Downsample focus-chart line rendering — currently draws every raw sample in the visible domain (1M+ points at full zoom-out for 1000–5000 Hz recordings); only the context chart is downsampled today. Needs a min/max-per-bucket downsampler (a naive stride, like `viewportCulling.ts` uses now, would clip cardiac spikes), targeting ~2-4k rendered points at any zoom level
 - [ ] Cache parsed physio/confounds reads server-side — `server/bids-physio-plugin.ts` re-parses (sync gunzip + full TSV parse) on every request, even when revisiting a scan just seen; add an in-memory cache keyed by sub/ses/task/run
-- [ ] Support alternative confounds column names (e.g. `*motion*` in ds006644 derivatives) — currently hardcoded to `framewise_displacement`
 - [ ] Support custom signals those computations by convolving physiological response functions (Birn et al. 2006/2008 respiration-BOLD, Chang & Glover 2009 cardiac/respiratory response functions)
 - [ ] Production build — the server plugin only works in Vite dev mode; the FastAPI backend planned above should supersede this, otherwise would need an Express/Fastify server for production
 
@@ -351,10 +385,3 @@ Only individual D3 modules (no monolithic `d3` package):
 ### SQI metrics
 
 - [ ] Export SQI metric calculations as TSV
-- [x] Add metrics from physioqc ([PR #44](https://github.com/physiopy/physioqc/pull/44)): Elgendi 2016 windowed kurtosis + approximate entropy (cardiac/PPG), Romano 2023 per-beat/breath correlation SQI (cardiac + respiratory)
-
-### BIDS layout & testing
-
-- [x] Support `run-` entity in filenames for datasets with repeated tasks
-- [x] Parameterized test suite for BIDS layout functions (works with any BIDS dataset)
-- [x] Unit tests for `bids-physio-reader.ts` transform functions

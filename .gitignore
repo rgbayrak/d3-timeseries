@@ -3,3 +3,4 @@ dist/
 *.local
 .vite/
 .claude/
+data/ds*/

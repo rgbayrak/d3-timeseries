@@ -20,11 +20,9 @@ import {
  * To add a new dataset, append an entry with { name, root }.
  */
 
-const HOME = process.env.HOME ?? '';
-const BASE = join(HOME, 'Documents/internal/data-label-modules/data');
+const BASE = join(process.cwd(), 'data');
 
 const datasets = [
-  { name: 'friends',  root: join(BASE, 'friends.physprep') },
   { name: 'ds006644', root: join(BASE, 'ds006644') },
   { name: 'ds000210', root: join(BASE, 'ds000210') },
 ].filter((d) => existsSync(d.root));

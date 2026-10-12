@@ -11,11 +11,25 @@ export interface ChannelQuality {
 export interface PhysioRaw {
   filename: string;
   samplingFrequency: number;
+  /** Time (s) of the first sample relative to scan onset (t = 0 = first volume) */
   startTime: number;
+  /** How startTime was established and whether trigger pulses confirm it */
+  timing: PhysioTiming;
   columns: string[];
   data: number[][];
   numSamples: number;
   quality: Record<string, ChannelQuality> | null;
+}
+
+export type TimingStatus = 'verified' | 'corrected' | 'mismatch' | 'unverified';
+
+/** Mirrors server/bids-layout.ts PhysioTiming */
+export interface PhysioTiming {
+  status: TimingStatus;
+  detail: string;
+  offset: number;
+  /** Trigger pulse times (s) on the scan-onset axis; empty if no trigger channel */
+  triggerTimes: number[];
 }
 
 export interface DataPoint {
@@ -34,6 +48,23 @@ export async function fetchSubjects(): Promise<SubjectInfo[]> {
   const res = await fetch('/api/bids/subjects');
   const json = await res.json();
   return json.subjects;
+}
+
+/** Mirrors server/bids-layout.ts DatasetInfo (from dataset_description.json) */
+export interface DatasetInfo {
+  name: string | null;
+  bidsVersion: string | null;
+  datasetType: string | null;
+  license: string | null;
+  authors: string[];
+  doi: string | null;
+  derivatives: { name: string; version: string | null }[];
+}
+
+export async function fetchDatasetInfo(): Promise<DatasetInfo | null> {
+  const res = await fetch('/api/bids/dataset');
+  if (!res.ok) return null;
+  return res.json();
 }
 
 export async function fetchScans(): Promise<ScanEntry[]> {
@@ -81,10 +112,22 @@ export function getTimeExtent(raw: PhysioRaw): [number, number] {
   return [t0, t1];
 }
 
+/**
+ * Visible time range for all charts: starts at scan onset (t = 0), not where
+ * the physio recording starts, so pre-scan physio is out of view.
+ */
+export function getViewExtent(raw: PhysioRaw): [number, number] {
+  const [, t1] = getTimeExtent(raw);
+  return [0, Math.max(t1, 0)];
+}
+
 export interface ConfoundsRaw {
   filename: string;
   numVolumes: number;
-  framewise_displacement: number[];
+  /** Onset (s) of each volume relative to the first volume, from the BOLD sidecar; null if unknown */
+  volumeTimes: number[] | null;
+  /** Confound column name → one value per volume (NaN for n/a) */
+  columns: Record<string, number[]>;
 }
 
 export async function fetchConfounds(
@@ -98,16 +141,24 @@ export async function fetchConfounds(
   return res.json();
 }
 
-/** Convert FD data to DataPoints using physio timing to derive TR. */
-export function toFDPoints(confounds: ConfoundsRaw, raw: PhysioRaw): DataPoint[] {
+/**
+ * Convert one confound column to DataPoints on the scan-onset time axis
+ * (t = 0 at the first volume, same axis as the physio signal).
+ * Volume i sits at volumeTimes[i] (from the BOLD sidecar). Without BOLD
+ * timing, volumes are spread evenly across the physio recording, which is
+ * only approximate and wrong when physio starts before the scan.
+ */
+export function toConfoundPoints(confounds: ConfoundsRaw, column: string, raw: PhysioRaw): DataPoint[] {
+  const values = confounds.columns[column] ?? [];
   const physioDuration = (raw.numSamples - 1) / raw.samplingFrequency;
-  const tr = physioDuration / confounds.numVolumes;
-  const t0 = raw.startTime;
+  const fallbackTr = physioDuration / confounds.numVolumes;
+  const timeOf = (i: number) =>
+    confounds.volumeTimes?.[i] ?? raw.startTime + i * fallbackTr;
   const points: DataPoint[] = [];
-  for (let i = 0; i < confounds.framewise_displacement.length; i++) {
-    const val = confounds.framewise_displacement[i];
+  for (let i = 0; i < values.length; i++) {
+    const val = values[i];
     if (val == null || Number.isNaN(val)) continue;
-    points.push({ time: t0 + i * tr, value: val });
+    points.push({ time: timeOf(i), value: val });
   }
   return points;
 }

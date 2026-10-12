@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   toDataPoints,
   getTimeExtent,
+  getViewExtent,
   getValueExtent,
-  toFDPoints,
+  toConfoundPoints,
 } from '../bids-physio-reader';
 import type { PhysioRaw, ConfoundsRaw } from '../bids-physio-reader';
 
@@ -12,6 +13,7 @@ function makeRaw(overrides?: Partial<PhysioRaw>): PhysioRaw {
     filename: 'test_physio.tsv.gz',
     samplingFrequency: 100,
     startTime: 0,
+    timing: { status: 'unverified', detail: '', offset: 0, triggerTimes: [] },
     columns: ['A', 'B'],
     data: [
       [1, 2, 3, 4, 5],
@@ -70,6 +72,20 @@ describe('getTimeExtent', () => {
   });
 });
 
+describe('getViewExtent', () => {
+  it('starts at scan onset when physio starts before it', () => {
+    const raw = makeRaw({ startTime: -1, numSamples: 201 });
+    const [, t1] = getTimeExtent(raw);
+    expect(getViewExtent(raw)).toEqual([0, t1]);
+  });
+
+  it('starts at scan onset when physio starts after it', () => {
+    const raw = makeRaw({ startTime: 1 });
+    const [, t1] = getTimeExtent(raw);
+    expect(getViewExtent(raw)).toEqual([0, t1]);
+  });
+});
+
 describe('getValueExtent', () => {
   it('returns min/max with 2% padding', () => {
     const raw = makeRaw();
@@ -95,16 +111,17 @@ describe('getValueExtent', () => {
   });
 });
 
-describe('toFDPoints', () => {
-  it('derives TR from physio duration and produces correct time points', () => {
+describe('toConfoundPoints', () => {
+  it('without BOLD timing, derives TR from physio duration', () => {
     const raw = makeRaw({ numSamples: 1001, samplingFrequency: 100, startTime: 0 });
     // physio duration = 1000/100 = 10s
     const confounds: ConfoundsRaw = {
       filename: 'test_confounds.tsv',
       numVolumes: 5,
-      framewise_displacement: [0.1, 0.2, 0.3, 0.4, 0.5],
+      volumeTimes: null,
+      columns: { framewise_displacement: [0.1, 0.2, 0.3, 0.4, 0.5] },
     };
-    const points = toFDPoints(confounds, raw);
+    const points = toConfoundPoints(confounds, 'framewise_displacement', raw);
     expect(points).toHaveLength(5);
     // TR = 10/5 = 2s
     expect(points[0]).toEqual({ time: 0, value: 0.1 });
@@ -117,23 +134,25 @@ describe('toFDPoints', () => {
     const confounds: ConfoundsRaw = {
       filename: 'test_confounds.tsv',
       numVolumes: 4,
-      framewise_displacement: [NaN, 0.1, NaN, 0.2],
+      volumeTimes: null,
+      columns: { framewise_displacement: [NaN, 0.1, NaN, 0.2] },
     };
-    const points = toFDPoints(confounds, raw);
+    const points = toConfoundPoints(confounds, 'framewise_displacement', raw);
     expect(points).toHaveLength(2);
     expect(points[0].value).toBe(0.1);
     expect(points[1].value).toBe(0.2);
   });
 
-  it('accounts for startTime offset', () => {
+  it('without BOLD timing, accounts for startTime offset', () => {
     const raw = makeRaw({ numSamples: 501, samplingFrequency: 100, startTime: 5 });
     // duration = 500/100 = 5s, TR = 5/2 = 2.5s
     const confounds: ConfoundsRaw = {
       filename: 'test_confounds.tsv',
       numVolumes: 2,
-      framewise_displacement: [0.1, 0.2],
+      volumeTimes: null,
+      columns: { framewise_displacement: [0.1, 0.2] },
     };
-    const points = toFDPoints(confounds, raw);
+    const points = toConfoundPoints(confounds, 'framewise_displacement', raw);
     expect(points[0].time).toBe(5);
     expect(points[1].time).toBeCloseTo(7.5);
   });

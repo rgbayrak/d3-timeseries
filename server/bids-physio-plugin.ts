@@ -9,22 +9,15 @@ import {
   readAnnotations,
   writeAnnotations,
   buildScans,
+  readDatasetInfo,
 } from './bids-layout';
 import type { AnnotationsFile } from './bids-layout';
 
 const BIDS_ROOT =
-  process.env.BIDS_ROOT ??
-  join(
-    process.env.HOME ?? '',
-    'Documents/internal/data-label-modules/data/friends.physprep',
-  );
+  process.env.BIDS_ROOT ?? join(process.cwd(), 'data', 'ds006644');
 
 const BIDSDER_ROOT =
-  process.env.BIDSDER_ROOT ??
-  join(
-    process.env.HOME ?? '',
-    'Documents/internal/data-label-modules/data/friends.fmriprep',
-  );
+  process.env.BIDSDER_ROOT ?? join(BIDS_ROOT, 'derivatives', 'fmriprep');
 
 const ANNOTATIONS_ROOT =
   process.env.ANNOTATIONS_ROOT ?? join(process.cwd(), 'data', 'annotations');
@@ -32,6 +25,7 @@ const ANNOTATIONS_ROOT =
 export function bidsPhysioPlugin(): Plugin {
   let cachedSubjectsJson: string;
   let cachedScansJson: string;
+  let cachedDatasetJson: string;
 
   return {
     name: 'bids-physio',
@@ -44,11 +38,18 @@ export function bidsPhysioPlugin(): Plugin {
         `[bids-physio] Cached ${subjects.length} subjects, ${scans.length} scans from ${BIDS_ROOT}`,
       );
       console.log(`[bids-physio] Derivatives root: ${BIDSDER_ROOT}`);
+      cachedDatasetJson = JSON.stringify(readDatasetInfo(BIDS_ROOT, BIDSDER_ROOT));
 
       server.middlewares.use((req, res, next) => {
         if (req.url === '/api/bids/subjects') {
           res.setHeader('Content-Type', 'application/json');
           res.end(cachedSubjectsJson);
+          return;
+        }
+
+        if (req.url === '/api/bids/dataset') {
+          res.setHeader('Content-Type', 'application/json');
+          res.end(cachedDatasetJson);
           return;
         }
 
@@ -100,7 +101,7 @@ export function bidsPhysioPlugin(): Plugin {
             return;
           }
 
-          const result = readPhysio(BIDS_ROOT, sub, ses, task, run);
+          const result = readPhysio(BIDS_ROOT, sub, ses, task, run, BIDSDER_ROOT);
           if (!result) {
             res.statusCode = 404;
             res.end(JSON.stringify({ error: 'Physio file not found' }));
@@ -125,7 +126,7 @@ export function bidsPhysioPlugin(): Plugin {
             return;
           }
 
-          const result = readConfounds(BIDSDER_ROOT, sub, ses, task, run);
+          const result = readConfounds(BIDS_ROOT, BIDSDER_ROOT, sub, ses, task, run);
           if (!result) {
             res.statusCode = 404;
             res.end(JSON.stringify({ error: 'Confounds file not found' }));

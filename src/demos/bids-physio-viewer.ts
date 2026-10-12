@@ -6,6 +6,7 @@ import type { ScaleLinear } from 'd3-scale';
 import {
   fetchSubjects,
   fetchScans,
+  fetchDatasetInfo,
   fetchTasks,
   fetchRuns,
   fetchPhysioRaw,
@@ -13,11 +14,11 @@ import {
   fetchAnnotations,
   saveAnnotations,
   toDataPoints,
-  toFDPoints,
-  getTimeExtent,
+  toConfoundPoints,
+  getViewExtent,
   getValueExtent,
 } from '@/data/bids-physio-reader';
-import type { SubjectInfo, ScanEntry, PhysioRaw, ConfoundsRaw, DataPoint, AnnotationsFile } from '@/data/bids-physio-reader';
+import type { SubjectInfo, ScanEntry, PhysioRaw, ConfoundsRaw, DataPoint, AnnotationsFile, DatasetInfo } from '@/data/bids-physio-reader';
 import { computeSQI } from '@/data/sqi-metrics';
 import type { SQIResults, ChannelMetrics } from '@/data/sqi-metrics';
 
@@ -28,9 +29,12 @@ const taskSelect = document.getElementById('task-select') as HTMLSelectElement;
 const runSelect = document.getElementById('run-select') as HTMLSelectElement;
 const runLabel = document.getElementById('run-label') as HTMLLabelElement;
 const channelSelect = document.getElementById('channel-select') as HTMLSelectElement;
+const confoundSelect = document.getElementById('confound-select') as HTMLSelectElement;
+const confoundLabel = document.getElementById('confound-label') as HTMLLabelElement;
 const prevBtn = document.getElementById('prev-btn') as HTMLButtonElement;
 const nextBtn = document.getElementById('next-btn') as HTMLButtonElement;
 const searchInput = document.getElementById('search-input') as HTMLInputElement;
+const datasetInfoEl = document.getElementById('dataset-info')!;
 const filenameEl = document.getElementById('filename')!;
 const qualityBadgesEl = document.getElementById('quality-badges')!;
 const loadingEl = document.getElementById('loading')!;
@@ -167,8 +171,59 @@ function setLoading(msg: string) {
   loadingEl.textContent = msg;
 }
 
+/** Dataset name + metadata line, all taken from dataset_description.json */
+function renderDatasetInfo(info: DatasetInfo | null) {
+  datasetInfoEl.innerHTML = '';
+  if (!info || (!info.name && info.authors.length === 0 && !info.doi)) return;
+
+  const nameEl = document.createElement('div');
+  nameEl.className = 'dataset-name';
+  nameEl.textContent = info.name ?? '(unnamed dataset)';
+  datasetInfoEl.appendChild(nameEl);
+
+  const meta = document.createElement('div');
+  meta.className = 'dataset-meta';
+  const parts: (string | Node)[] = [];
+  if (info.authors.length) parts.push(info.authors.join(', '));
+  if (info.bidsVersion) parts.push(`BIDS ${info.bidsVersion}`);
+  if (info.license) parts.push(`License: ${info.license}`);
+  if (info.doi) {
+    // DatasetDOI is usually "doi:10.xxx/..."; link it via doi.org
+    const bare = info.doi.replace(/^doi:/i, '').replace(/^https?:\/\/(dx\.)?doi\.org\//i, '');
+    const a = document.createElement('a');
+    a.href = `https://doi.org/${bare}`;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = `doi:${bare}`;
+    parts.push(a);
+  }
+  for (const d of info.derivatives) {
+    parts.push(`Derivatives: ${d.name}${d.version ? ` ${d.version}` : ''}`);
+  }
+  parts.forEach((p, i) => {
+    if (i > 0) meta.append(' · ');
+    meta.append(p);
+  });
+  datasetInfoEl.appendChild(meta);
+}
+
+const TIMING_LABELS: Record<PhysioRaw['timing']['status'], string> = {
+  verified: 'Timing: trigger-verified',
+  corrected: 'Timing: corrected from triggers',
+  mismatch: 'Timing: triggers disagree',
+  unverified: 'Timing: sidecar only',
+};
+
 function renderQualityBadges(raw: PhysioRaw) {
   qualityBadgesEl.innerHTML = '';
+
+  // Timing badge: how t = 0 (scan onset) was established; hover for details
+  const timingBadge = document.createElement('span');
+  timingBadge.className = `quality-badge timing-${raw.timing.status}`;
+  timingBadge.textContent = TIMING_LABELS[raw.timing.status];
+  timingBadge.title = raw.timing.detail;
+  qualityBadgesEl.appendChild(timingBadge);
+
   if (!raw.quality) return;
   for (const ch of raw.columns) {
     const q = raw.quality[ch];
@@ -394,6 +449,45 @@ function destroyCharts() {
 let syncConfoundsXDomain: ((domain: [number, number]) => void) | null = null;
 
 // ── Build charts ────────────────────────────────────────
+/**
+ * Dashed vertical line at scan onset (t = 0, first BOLD volume), the shared
+ * reference for physio and confounds. Hidden when 0 is outside the x domain.
+ */
+function drawOnsetMarker(
+  chart: ChartInstance,
+  group: ReturnType<ChartInstance['getLayers']>['content'],
+  withLabel: boolean,
+) {
+  const xScale = chart.getScales().x as ScaleLinear<number, number>;
+  const [d0, d1] = xScale.domain();
+  const height = chart.getDimensions().innerHeight;
+  const visible = d0 <= 0 && 0 <= d1;
+  const x0 = xScale(0);
+
+  group.selectAll('*').remove();
+  if (!visible) return;
+  group
+    .append('line')
+    .attr('x1', x0)
+    .attr('x2', x0)
+    .attr('y1', 0)
+    .attr('y2', height)
+    .attr('stroke', '#7b3fa0')
+    .attr('stroke-width', 1.5)
+    .attr('stroke-dasharray', '5 3')
+    .attr('pointer-events', 'none');
+  if (withLabel) {
+    group
+      .append('text')
+      .attr('x', x0 + 4)
+      .attr('y', 12)
+      .attr('fill', '#7b3fa0')
+      .attr('font-size', 11)
+      .attr('pointer-events', 'none')
+      .text('scan onset (t = 0)');
+  }
+}
+
 function buildCharts(raw: PhysioRaw, channel: string) {
   destroyCharts();
   syncConfoundsXDomain = null;
@@ -402,7 +496,7 @@ function buildCharts(raw: PhysioRaw, channel: string) {
   renderAnnotationList();
 
   const data = toDataPoints(raw, channel);
-  const timeExtent = getTimeExtent(raw);
+  const timeExtent = getViewExtent(raw);
   const valueExtent = getValueExtent(raw, channel);
 
   // Focus chart
@@ -413,7 +507,7 @@ function buildCharts(raw: PhysioRaw, channel: string) {
     margin: { top: 20, right: 20, bottom: 40, left: 60 },
     xScale: { type: 'linear', domain: timeExtent },
     yScale: { type: 'linear', domain: valueExtent, nice: true },
-    xAxis: { position: 'bottom', label: 'Time (s)' },
+    xAxis: { position: 'bottom', label: 'Time from scan onset (s)' },
     yAxis: { position: 'left', label: channel },
     grid: {
       x: { strokeColor: '#e0e0e0', opacity: 0.5 },
@@ -457,6 +551,9 @@ function buildCharts(raw: PhysioRaw, channel: string) {
 
   const contextData = downsample(data, 2000);
 
+  const focusOnsetGroup = focusLayers.content.append('g').attr('class', 'onset-marker');
+  const contextOnsetGroup = contextLayers.content.append('g').attr('class', 'onset-marker');
+
   function drawFocusLine() {
     const { x, y } = focusChart!.getScales();
     const xDomain = (x as ScaleLinear<number, number>).domain() as [number, number];
@@ -481,6 +578,7 @@ function buildCharts(raw: PhysioRaw, channel: string) {
       .y((d) => (y as ScaleLinear<number, number>)(d.value));
 
     focusLinePath.datum(visible).attr('d', lineGen);
+    drawOnsetMarker(focusChart!, focusOnsetGroup, true);
   }
 
   function drawAnnotationBoxes() {
@@ -551,6 +649,7 @@ function buildCharts(raw: PhysioRaw, channel: string) {
       .y((d) => (y as ScaleLinear<number, number>)(d.value));
 
     contextLinePath.datum(contextData).attr('d', lineGen);
+    drawOnsetMarker(contextChart!, contextOnsetGroup, false);
   }
 
   drawFocusLine();
@@ -725,14 +824,32 @@ function buildCharts(raw: PhysioRaw, channel: string) {
   loadSavedAnnotations(currentSub, currentSes, currentTask, currentRun, channel);
 }
 
-// ── Build confounds (FD) chart ──────────────────────────
+// ── Build confounds chart ───────────────────────────────
+/** Axis label and tooltip unit for each confound column */
+const CONFOUND_UNITS: Record<string, { label: string; unit: string }> = {
+  framewise_displacement: { label: 'FD (mm)', unit: 'mm' },
+  rmsd: { label: 'RMSD (mm)', unit: 'mm' },
+  dvars: { label: 'DVARS', unit: '' },
+  std_dvars: { label: 'Std DVARS', unit: '' },
+  trans_x: { label: 'trans_x (mm)', unit: 'mm' },
+  trans_y: { label: 'trans_y (mm)', unit: 'mm' },
+  trans_z: { label: 'trans_z (mm)', unit: 'mm' },
+  rot_x: { label: 'rot_x (rad)', unit: 'rad' },
+  rot_y: { label: 'rot_y (rad)', unit: 'rad' },
+  rot_z: { label: 'rot_z (rad)', unit: 'rad' },
+};
+
 function buildConfoundsChart(confounds: ConfoundsRaw, raw: PhysioRaw) {
   confoundsChart?.destroy();
   confoundsChart = null;
   syncConfoundsXDomain = null;
 
-  const fdData = toFDPoints(confounds, raw);
-  if (fdData.length === 0) {
+  const column = confoundSelect.value;
+  const isFD = column === 'framewise_displacement';
+  const { label: yLabel, unit } = CONFOUND_UNITS[column] ?? { label: column, unit: '' };
+
+  const points = toConfoundPoints(confounds, column, raw);
+  if (points.length === 0) {
     confoundsSectionEl.style.display = 'none';
     return;
   }
@@ -740,14 +857,24 @@ function buildConfoundsChart(confounds: ConfoundsRaw, raw: PhysioRaw) {
   confoundsSectionEl.style.display = '';
   confoundsLabelEl.textContent = confounds.filename;
 
-  const timeExtent = getTimeExtent(raw);
+  const timeExtent = getViewExtent(raw);
 
-  // Compute y extent for FD
-  let fdMax = 0;
-  for (const d of fdData) {
-    if (d.value > fdMax) fdMax = d.value;
+  // Compute y extent. FD is non-negative and anchored at 0; other
+  // confounds (e.g. translations) can be signed, so fit both ends.
+  let vMin = Infinity;
+  let vMax = -Infinity;
+  for (const d of points) {
+    if (d.value < vMin) vMin = d.value;
+    if (d.value > vMax) vMax = d.value;
   }
-  const yMax = fdMax * 1.1 || 0.1; // 10% headroom, fallback if all zeros
+  let yDomain: [number, number];
+  if (isFD) {
+    yDomain = [0, vMax * 1.1 || 0.1]; // 10% headroom, fallback if all zeros
+  } else {
+    const pad = (vMax - vMin) * 0.1 || Math.abs(vMax) * 0.1 || 0.1;
+    yDomain = [vMin - pad, vMax + pad];
+  }
+  const yMax = yDomain[1];
 
   confoundsChart = createChart({
     container: '#confounds-chart',
@@ -755,9 +882,9 @@ function buildConfoundsChart(confounds: ConfoundsRaw, raw: PhysioRaw) {
     height: 170,
     margin: { top: 10, right: 20, bottom: 40, left: 60 },
     xScale: { type: 'linear', domain: timeExtent },
-    yScale: { type: 'linear', domain: [0, yMax], nice: true },
-    xAxis: { position: 'bottom', label: 'Time (s)' },
-    yAxis: { position: 'left', label: 'FD (mm)' },
+    yScale: { type: 'linear', domain: yDomain, nice: true },
+    xAxis: { position: 'bottom', label: 'Time from scan onset (s)' },
+    yAxis: { position: 'left', label: yLabel },
     grid: {
       y: { strokeColor: '#e0e0e0', opacity: 0.5 },
     },
@@ -769,11 +896,11 @@ function buildConfoundsChart(confounds: ConfoundsRaw, raw: PhysioRaw) {
 
   const dims = confoundsChart.getDimensions();
 
-  // Reference lines for FD ranges
+  // FD-only reference lines for motion severity ranges
   const { y: yScale } = confoundsChart.getScales();
 
   // 0.2mm reference line (upper bound of "good" range)
-  if (yMax >= 0.2) {
+  if (isFD && yMax >= 0.2) {
     const thresh02Y = (yScale as ScaleLinear<number, number>)(0.2);
     layers.content
       .append('line')
@@ -789,7 +916,7 @@ function buildConfoundsChart(confounds: ConfoundsRaw, raw: PhysioRaw) {
   }
 
   // 0.5mm reference line (upper bound of "acceptable" range)
-  if (yMax >= 0.5) {
+  if (isFD && yMax >= 0.5) {
     const thresh05Y = (yScale as ScaleLinear<number, number>)(0.5);
     layers.content
       .append('line')
@@ -804,39 +931,42 @@ function buildConfoundsChart(confounds: ConfoundsRaw, raw: PhysioRaw) {
       .attr('opacity', 0.6);
   }
 
-  // Container for colored FD segments
-  const fdSegmentsGroup = layers.content.append('g').attr('class', 'fd-segments');
+  // Container for line segments (colored by severity for FD)
+  const segmentsGroup = layers.content.append('g').attr('class', 'confound-segments');
+  const confoundsOnsetGroup = layers.content.append('g').attr('class', 'onset-marker');
 
-  function drawFDLine() {
+  function drawConfoundLine() {
     const { x, y } = confoundsChart!.getScales();
 
     // Clear previous segments
-    fdSegmentsGroup.selectAll('path').remove();
+    segmentsGroup.selectAll('path').remove();
 
-    // Segment data by FD value ranges and draw with different colors
+    // Split the line into runs of the same color and draw each
     const segments: { data: DataPoint[]; color: string }[] = [];
     let currentSegment: DataPoint[] = [];
     let currentColor = '';
 
-    const getColorForFD = (fd: number): string => {
-      if (fd <= 0.2) return '#66c2a5'; // green - excellent
-      if (fd <= 0.5) return '#fdae61'; // amber - acceptable
+    // Severity colors only apply to FD; other confounds draw in one color
+    const colorFor = (v: number): string => {
+      if (!isFD) return '#3b6ea5';
+      if (v <= 0.2) return '#66c2a5'; // green - excellent
+      if (v <= 0.5) return '#fdae61'; // amber - acceptable
       return '#d73027'; // red - excessive
     };
 
-    for (let i = 0; i < fdData.length; i++) {
-      const color = getColorForFD(fdData[i].value);
+    for (let i = 0; i < points.length; i++) {
+      const color = colorFor(points[i].value);
 
       if (color !== currentColor) {
         if (currentSegment.length > 0) {
           // Add previous point to maintain continuity
-          if (i > 0) currentSegment.push(fdData[i]);
+          if (i > 0) currentSegment.push(points[i]);
           segments.push({ data: [...currentSegment], color: currentColor });
         }
-        currentSegment = i > 0 ? [fdData[i - 1], fdData[i]] : [fdData[i]];
+        currentSegment = i > 0 ? [points[i - 1], points[i]] : [points[i]];
         currentColor = color;
       } else {
-        currentSegment.push(fdData[i]);
+        currentSegment.push(points[i]);
       }
     }
 
@@ -851,7 +981,7 @@ function buildConfoundsChart(confounds: ConfoundsRaw, raw: PhysioRaw) {
       .y((d) => (y as ScaleLinear<number, number>)(d.value));
 
     segments.forEach((seg) => {
-      fdSegmentsGroup
+      segmentsGroup
         .append('path')
         .datum(seg.data)
         .attr('d', lineGen)
@@ -859,9 +989,11 @@ function buildConfoundsChart(confounds: ConfoundsRaw, raw: PhysioRaw) {
         .attr('stroke', seg.color)
         .attr('stroke-width', 2);
     });
+
+    drawOnsetMarker(confoundsChart!, confoundsOnsetGroup, false);
   }
 
-  drawFDLine();
+  drawConfoundLine();
 
   // Sync callback: update x domain when physio zooms
   syncConfoundsXDomain = (domain: [number, number]) => {
@@ -869,7 +1001,7 @@ function buildConfoundsChart(confounds: ConfoundsRaw, raw: PhysioRaw) {
     const { x } = confoundsChart.getScales();
     (x as ScaleLinear<number, number>).domain(domain);
     confoundsChart.renderAxesAndGrid();
-    drawFDLine();
+    drawConfoundLine();
 
     // Redraw threshold lines at new width (if present)
     const d = confoundsChart.getDimensions();
@@ -909,18 +1041,18 @@ function buildConfoundsChart(confounds: ConfoundsRaw, raw: PhysioRaw) {
       const [mx] = pointer(event, overlayRect.node()!);
       const hoveredTime = (x as ScaleLinear<number, number>).invert(mx);
 
-      // Find nearest FD point
+      // Find nearest confound point
       let lo = 0;
-      let hi = fdData.length - 1;
+      let hi = points.length - 1;
       while (hi - lo > 1) {
         const mid = (lo + hi) >> 1;
-        if (fdData[mid].time < hoveredTime) lo = mid;
+        if (points[mid].time < hoveredTime) lo = mid;
         else hi = mid;
       }
       const nearest =
-        Math.abs(fdData[lo].time - hoveredTime) < Math.abs(fdData[hi].time - hoveredTime)
-          ? fdData[lo]
-          : fdData[hi];
+        Math.abs(points[lo].time - hoveredTime) < Math.abs(points[hi].time - hoveredTime)
+          ? points[lo]
+          : points[hi];
 
       const cx = (x as ScaleLinear<number, number>)(nearest.time);
       const cy = (y as ScaleLinear<number, number>)(nearest.value);
@@ -935,7 +1067,7 @@ function buildConfoundsChart(confounds: ConfoundsRaw, raw: PhysioRaw) {
       hoverCircle.attr('cx', cx).attr('cy', cy).style('opacity', 1);
 
       confoundsChart!.getTooltip()?.show(
-        `<div><strong>${nearest.time.toFixed(2)} s</strong></div><div>FD: ${nearest.value.toFixed(4)} mm</div>`,
+        `<div><strong>${nearest.time.toFixed(2)} s</strong></div><div>${column}: ${nearest.value.toFixed(4)}${unit ? ` ${unit}` : ''}</div>`,
         event.pageX,
         event.pageY,
       );
@@ -947,7 +1079,7 @@ function buildConfoundsChart(confounds: ConfoundsRaw, raw: PhysioRaw) {
     });
 
   // Resize
-  confoundsChart.on('resize', drawFDLine);
+  confoundsChart.on('resize', drawConfoundLine);
 }
 
 // ── Data loading ────────────────────────────────────────
@@ -987,8 +1119,16 @@ async function loadPhysio(sub: string, ses: string, task: string, run: string) {
     buildCharts(cachedRaw, channelSelect.value);
 
     if (cachedConfounds) {
+      const confoundCols = Object.keys(cachedConfounds.columns);
+      const preferredConfound = confoundCols.includes(confoundSelect.value)
+        ? confoundSelect.value
+        : confoundCols[0];
+      populateSelect(confoundSelect, confoundCols, preferredConfound);
+      confoundLabel.style.display = '';
       buildConfoundsChart(cachedConfounds, cachedRaw);
     } else {
+      // No derivatives for this scan (or no BIDSDER_ROOT): hide the picker
+      confoundLabel.style.display = 'none';
       confoundsSectionEl.style.display = 'none';
     }
 
@@ -1029,6 +1169,10 @@ channelSelect.addEventListener('change', () => {
     buildCharts(cachedRaw, channelSelect.value);
     if (cachedConfounds) buildConfoundsChart(cachedConfounds, cachedRaw);
   }
+});
+
+confoundSelect.addEventListener('change', () => {
+  if (cachedRaw && cachedConfounds) buildConfoundsChart(cachedConfounds, cachedRaw);
 });
 
 async function goToScan(scan: ScanEntry) {
@@ -1096,7 +1240,14 @@ searchInput.addEventListener('keydown', async (e) => {
 // ── Init ────────────────────────────────────────────────
 (async () => {
   setLoading('Loading subjects...');
-  [subjects, allScans] = await Promise.all([fetchSubjects(), fetchScans()]);
+  const [subjectsRes, scansRes, datasetInfo] = await Promise.all([
+    fetchSubjects(),
+    fetchScans(),
+    fetchDatasetInfo().catch(() => null),
+  ]);
+  subjects = subjectsRes;
+  allScans = scansRes;
+  renderDatasetInfo(datasetInfo);
 
   populateSelect(subjectSelect, subjects.map((s) => s.id));
   const first = allScans[0];

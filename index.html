@@ -48,6 +48,13 @@
       max-width: 960px;
       margin: 0 auto 12px;
       display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* Rows: 1 = scan/channel pickers, 2 = navigation + search, 3 = tools */
+    .controls-row {
+      display: flex;
       align-items: center;
       gap: 16px;
       flex-wrap: wrap;
@@ -75,6 +82,35 @@
       font-size: 14px;
       padding: 2px 6px;
       width: 120px;
+    }
+
+    #dataset-info {
+      max-width: 960px;
+      margin: 0 auto 12px;
+      font-size: 13px;
+      color: #555;
+      /* Divider, same style as the line above the confounds section */
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 8px;
+    }
+
+    #dataset-info:empty {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    #dataset-info .dataset-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: #222;
+    }
+
+    #dataset-info .dataset-meta {
+      margin-top: 2px;
+    }
+
+    #dataset-info a {
+      color: #2d6da3;
     }
 
     #filename {
@@ -123,6 +159,29 @@
       background: #fce8e6;
       color: #c62828;
       border: 1px solid #f5b7b1;
+    }
+
+    .quality-badge.timing-verified {
+      background: #e6f4ea;
+      color: #1e7e34;
+      border: 1px solid #b7e1c4;
+    }
+
+    .quality-badge.timing-corrected,
+    .quality-badge.timing-unverified {
+      background: #fff4e5;
+      color: #8a5a00;
+      border: 1px solid #f3d19e;
+    }
+
+    .quality-badge.timing-mismatch {
+      background: #fce8e6;
+      color: #c62828;
+      border: 1px solid #f5b7b1;
+    }
+
+    .quality-badge[title] {
+      cursor: help;
     }
 
     .quality-badge .pct {
@@ -399,18 +458,26 @@
 </head>
 <body>
   <div id="controls">
-    <label>Subject <select id="subject-select"></select></label>
-    <label>Session <select id="session-select"></select></label>
-    <label>Task <select id="task-select"></select></label>
-    <label id="run-label" style="display:none">Run <select id="run-select"></select></label>
-    <label>Channel <select id="channel-select"></select></label>
-    <button id="prev-btn" type="button">&laquo; Prev</button>
-    <button id="next-btn" type="button">Next &raquo;</button>
-    <input id="search-input" type="text" placeholder="e.g. sub-03 or ses-012">
-    <span id="loading"></span>
-    <button id="compute-sqi-btn" type="button">Compute SQI</button>
-    <button id="annotate-mode-btn" type="button">Annotate: Off</button>
+    <div class="controls-row">
+      <label>Subject <select id="subject-select"></select></label>
+      <label>Session <select id="session-select"></select></label>
+      <label>Task <select id="task-select"></select></label>
+      <label id="run-label" style="display:none">Run <select id="run-select"></select></label>
+      <label>Channel <select id="channel-select"></select></label>
+      <label id="confound-label" style="display:none">Confound <select id="confound-select"></select></label>
+    </div>
+    <div class="controls-row">
+      <button id="prev-btn" type="button">&laquo; Prev</button>
+      <button id="next-btn" type="button">Next &raquo;</button>
+      <input id="search-input" type="text" placeholder="e.g. sub-03 or ses-012">
+      <span id="loading"></span>
+    </div>
+    <div class="controls-row">
+      <button id="compute-sqi-btn" type="button">Compute SQI</button>
+      <button id="annotate-mode-btn" type="button">Annotate: Off</button>
+    </div>
   </div>
+  <div id="dataset-info"></div>
   <div id="filename"></div>
   <div id="quality-badges"></div>
   <div id="sqi-section" style="display:none">
