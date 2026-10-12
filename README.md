@@ -33,7 +33,7 @@ Open the URL Vite prints (usually `http://localhost:5173`). The app loads a BIDS
 - **Focus chart** (top) — drag to brush-select a time window (zooms on release), double-click to reset, auto-fits Y-axis to visible data; hover for data readout
 - **Context chart** (bottom) — drag the brush to navigate; handles resize the viewport
 - **Confounds chart** — pick a motion confound from the Confound dropdown (shown only when fMRIPrep derivatives exist); FD is color-coded by severity (green/amber/red) with 0.2 mm and 0.5 mm reference lines
-- **Channel persistence** — selected channel is preserved when stepping through scans with Prev/Next
+- **Channel persistence** — selected channel is preserved when stepping through scans with Prev/Next; a reload resumes the last-viewed scan, channel and confound (saved per dataset in the browser's localStorage)
 - **SQI table** — on-demand per-channel signal quality metrics (mean, std dev, SNR, kurtosis, skewness, zero-crossing rate, etc.)
 - **Annotations** — toggle Annotate mode, drag on the focus chart to mark and label a time window; annotations persist to disk per `{sub, ses, task, run, channel}` and reload automatically when you return to that scan
 
@@ -374,11 +374,11 @@ Only individual D3 modules (no monolithic `d3` package):
 - [ ] Downsample focus-chart line rendering — currently draws every raw sample in the visible domain (1M+ points at full zoom-out for 1000–5000 Hz recordings); only the context chart is downsampled today. Needs a min/max-per-bucket downsampler (a naive stride, like `viewportCulling.ts` uses now, would clip cardiac spikes), targeting ~2-4k rendered points at any zoom level
 - [ ] Cache parsed physio/confounds reads server-side — `server/bids-physio-plugin.ts` re-parses (sync gunzip + full TSV parse) on every request, even when revisiting a scan just seen; add an in-memory cache keyed by sub/ses/task/run
 - [ ] Support custom signals those computations by convolving physiological response functions (Birn et al. 2006/2008 respiration-BOLD, Chang & Glover 2009 cardiac/respiratory response functions)
-- [ ] Production build — the server plugin only works in Vite dev mode; the FastAPI backend planned above should supersede this, otherwise would need an Express/Fastify server for production
+- [ ] Production build, the server plugin only works in Vite dev mode; the FastAPI backend planned above should supersede this, otherwise would need an Express/Fastify server for production
 
 ### Viewer UX
 
-- [ ] Persist last-viewed scan in localStorage so reloads resume where you left off
+- [x] Persist last-viewed scan (plus channel and confound) in localStorage so reloads resume where you left off
 - [ ] Enable channel selection to visualize selected channels in a vertical stack as new figures
 
 ### SQI metrics

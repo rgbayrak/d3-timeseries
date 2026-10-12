@@ -1112,17 +1112,20 @@ async function loadPhysio(sub: string, ses: string, task: string, run: string) {
 
     filenameEl.textContent = cachedRaw.filename;
     renderQualityBadges(cachedRaw);
-    const preferredChannel = cachedRaw.columns.includes(channelSelect.value)
-      ? channelSelect.value
-      : cachedRaw.columns[0];
-    populateSelect(channelSelect, cachedRaw.columns, preferredChannel);
+    // Keep the current channel/confound when the new scan has it; on the first
+    // load after a reload, prefer the one restored from localStorage
+    const columns = cachedRaw.columns;
+    const preferredChannel =
+      [restoredSelection?.channel, channelSelect.value].find((c) => c && columns.includes(c)) ??
+      columns[0];
+    populateSelect(channelSelect, columns, preferredChannel);
     buildCharts(cachedRaw, channelSelect.value);
 
     if (cachedConfounds) {
       const confoundCols = Object.keys(cachedConfounds.columns);
-      const preferredConfound = confoundCols.includes(confoundSelect.value)
-        ? confoundSelect.value
-        : confoundCols[0];
+      const preferredConfound =
+        [restoredSelection?.confound, confoundSelect.value].find((c) => c && confoundCols.includes(c)) ??
+        confoundCols[0];
       populateSelect(confoundSelect, confoundCols, preferredConfound);
       confoundLabel.style.display = '';
       buildConfoundsChart(cachedConfounds, cachedRaw);
@@ -1132,9 +1135,50 @@ async function loadPhysio(sub: string, ses: string, task: string, run: string) {
       confoundsSectionEl.style.display = 'none';
     }
 
+    restoredSelection = null;
+    saveLastViewed();
     setLoading('');
   } catch (err) {
     setLoading(`Error: ${err}`);
+  }
+}
+
+// ── Last-viewed scan (localStorage) ─────────────────────
+// Per-browser convenience only: storage can be unavailable (private mode,
+// blocked site data), so every access is wrapped and failures are ignored.
+interface LastViewed extends ScanEntry {
+  channel: string;
+  confound: string;
+}
+
+/** Storage key; scoped per dataset (by name) once dataset info has loaded */
+let lastViewedKey = 'bids-physio-viewer:last-viewed';
+/** Channel/confound restored on reload, consumed by the first loadPhysio */
+let restoredSelection: { channel: string; confound: string } | null = null;
+
+function saveLastViewed() {
+  if (!currentSub) return;
+  const value: LastViewed = {
+    sub: currentSub,
+    ses: currentSes,
+    task: currentTask,
+    run: currentRun,
+    channel: channelSelect.value,
+    confound: confoundSelect.value,
+  };
+  try {
+    localStorage.setItem(lastViewedKey, JSON.stringify(value));
+  } catch {
+    // ignore: storage unavailable
+  }
+}
+
+function readLastViewed(): LastViewed | null {
+  try {
+    const raw = localStorage.getItem(lastViewedKey);
+    return raw ? (JSON.parse(raw) as LastViewed) : null;
+  } catch {
+    return null;
   }
 }
 
@@ -1169,10 +1213,12 @@ channelSelect.addEventListener('change', () => {
     buildCharts(cachedRaw, channelSelect.value);
     if (cachedConfounds) buildConfoundsChart(cachedConfounds, cachedRaw);
   }
+  saveLastViewed();
 });
 
 confoundSelect.addEventListener('change', () => {
   if (cachedRaw && cachedConfounds) buildConfoundsChart(cachedConfounds, cachedRaw);
+  saveLastViewed();
 });
 
 async function goToScan(scan: ScanEntry) {
@@ -1261,8 +1307,18 @@ searchInput.addEventListener('keydown', async (e) => {
   allScans = scansRes;
   renderDatasetInfo(datasetInfo);
 
-  populateSelect(subjectSelect, subjects.map((s) => s.id));
-  const first = allScans[0];
+  // Resume the last-viewed scan for this dataset if it still exists
+  lastViewedKey = `bids-physio-viewer:last-viewed:${datasetInfo?.name ?? 'unnamed'}`;
+  const saved = readLastViewed();
+  const resumed = saved
+    ? allScans.find(
+        (s) => s.sub === saved.sub && s.ses === saved.ses && s.task === saved.task && s.run === saved.run,
+      )
+    : undefined;
+  if (resumed && saved) restoredSelection = { channel: saved.channel, confound: saved.confound };
+
+  const first = resumed ?? allScans[0];
+  populateSelect(subjectSelect, subjects.map((s) => s.id), first.sub);
   const firstInfo = subjects.find((s) => s.id === first.sub)!;
   populateSelect(sessionSelect, firstInfo.sessions, first.ses);
   await populateTasks(first.sub, first.ses, first.task);
