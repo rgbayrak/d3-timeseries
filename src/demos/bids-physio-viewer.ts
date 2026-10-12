@@ -1199,6 +1199,18 @@ async function stepScan(delta: number) {
 prevBtn.addEventListener('click', () => stepScan(-1));
 nextBtn.addEventListener('click', () => stepScan(1));
 
+// ←/→ step to the previous/next scan. Ignored while typing in the search box
+// or using a dropdown (where arrow keys already have a meaning), and when a
+// modifier is held so browser shortcuts (e.g. Alt+← for back) keep working.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  const target = e.target as HTMLElement | null;
+  if (target?.closest('input, select, textarea, [contenteditable="true"]')) return;
+  e.preventDefault();
+  stepScan(e.key === 'ArrowLeft' ? -1 : 1);
+});
+
 searchInput.addEventListener('keydown', async (e) => {
   if (e.key !== 'Enter') return;
   const q = searchInput.value.trim();

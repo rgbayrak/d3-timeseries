@@ -26,7 +26,7 @@ Optional: `git annex adjust --unlock` checks files out as regular files instead 
 
 Open the URL Vite prints (usually `http://localhost:5173`). The app loads a BIDS physiology dataset and presents an interactive viewer with:
 
-- **Controls** — three rows: Subject, Session, Task, Run (when present), Channel and Confound (when derivatives exist) dropdowns; Prev/Next buttons to step through scans in hierarchy order plus a search bar accepting `sub-03` or `ses-012` style input; Compute SQI and Annotate buttons
+- **Controls** — three rows: Subject, Session, Task, Run (when present), Channel and Confound (when derivatives exist) dropdowns; Prev/Next buttons (or ←/→ keys) to step through scans in hierarchy order plus a search bar accepting `sub-03` or `ses-012` style input; Compute SQI and Annotate buttons
 - **Dataset info** — name, authors, BIDS version, license, DOI link and derivatives pipeline/version, read from the dataset's own `dataset_description.json` (raw and derivatives); fields that are missing are skipped
 - **Filename display** — shows the exact `.tsv.gz` file being viewed
 - **Badges** — a timing badge (see [Timing alignment](#timing-alignment)) and per-channel pass/fail quality indicators when a `_desc-quality.json` sidecar is present (run-level, e.g. `*_run-01_desc-quality.json`, or run-less)
@@ -378,7 +378,6 @@ Only individual D3 modules (no monolithic `d3` package):
 
 ### Viewer UX
 
-- [ ] Keyboard shortcuts for Prev/Next navigation (arrow keys)
 - [ ] Persist last-viewed scan in localStorage so reloads resume where you left off
 - [ ] Enable channel selection to visualize selected channels in a vertical stack as new figures
 
