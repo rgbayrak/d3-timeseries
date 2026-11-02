@@ -1,8 +1,8 @@
 {
-  "name": "d3-ts-library",
+  "name": "physai-qa-interactive",
   "version": "0.1.0",
   "private": true,
-  "license": "PolyForm-Noncommercial-1.0.0",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
