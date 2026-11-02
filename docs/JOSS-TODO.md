@@ -23,7 +23,7 @@ install and run the tool from the README.
 ## Phase 3 — Packaging and release
 
 - [ ] Installable package (`npm install -g physai-qa-interactive`, or publish to npm) with the launch command as its `bin`
-- [ ] Versioned GitHub release (e.g. `v1.0.0`) matching the version in `package.json` and `CITATION.cff`
+- [ ] Versioned GitHub release matching the version in `package.json` and `CITATION.cff`. A `v1.0.0` tag exists, but both files still say `0.1.0`; cut the reviewed release after Phase 2 with all three in sync
 - [ ] Zenodo archive of the release (DOI `10.5281/zenodo.19389717` exists; confirm it points at the reviewed version, or mint a new version DOI)
 
 ## Phase 4 — Documentation (JOSS review checklist)
@@ -41,28 +41,16 @@ install and run the tool from the README.
 `paper/paper.md` + `paper/paper.bib`, roughly 250–1000 words.
 
 - [ ] Date (title, tags, authors, ORCIDs and affiliations set)
-- [ ] **Summary** for a non-specialist audience. Drafted; needs your review
-- [ ] **Statement of need**: the research problem and target users. Drafted; needs your review
-- [ ] **Software design**: add the standalone server and launch command once Phase 2 lands
-- [ ] Research use: add any studies or labs using the tool (TODO comment in the paper)
+- [x] **Summary** for a non-specialist audience. Drafted; needs your review
+- [x] **Statement of need**: the research problem and target users. Drafted; needs your review
+- [x] **Software design**: add the standalone server and launch command once Phase 2 lands
+- [ ] **Research use**: add labs tested the tool (TODO comment in the paper)
 - [ ] Acknowledgements and funding
 - [ ] Build the PDF locally or with the JOSS GitHub Action (`openjournals/openjournals-draft-action`) and check it renders
 
 ## Phase 6 — Before submitting
 
-- [ ] Issues enabled on GitHub (repository is public ✓)
-- [ ] All CI checks pass on `main`
+- [ ] Re-check if all CI checks pass on `main` before submitting
 - [ ] A fresh clone installs and runs from the README instructions alone, on a machine without `data/`
-- [ ] Authorship: everyone listed made substantial contributions; commit history reflects it
+- [ ] Authorship: everyone listed made substantial contributions
 - [ ] Submit at https://joss.theoj.org/papers/new
-
----
-
-## Deferred to physAI-QA-auto
-
-Not part of this submission. Kept here so the plan isn't lost; move to the
-physAI-QA-auto repository when it exists.
-
-- Python physio core library: BIDS discovery, physio and confounds reading, timing verification, SQI metrics and annotation storage, ported from `server/bids-layout.ts` and `src/data/sqi-metrics.ts`, with a pytest suite on the same `test/fixtures/` matching the TypeScript results value-for-value
-- FastAPI service exposing that core (the same `/api/bids/*` JSON shapes), so physAI-QA-interactive can switch its back end without UI changes
-- Python packaging (PyPI) and API documentation from docstrings
