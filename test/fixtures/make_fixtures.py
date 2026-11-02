@@ -154,10 +154,11 @@ def make_sessions(root: Path) -> None:
             })
 
     # Run-level quality sidecar for sub-01 ses-01
+    # PercentageValid is a fraction (0-1, one decimal), as in physprep outputs
     write_json(root / "sub-01" / "ses-01" / "func" / "sub-01_ses-01_task-rest_run-01_desc-quality.json", {
         "Description": "Per-channel quality",
-        "cardiac": {"QualityAssessment": "pass", "PercentageValid": 98.5},
-        "respiratory": {"QualityAssessment": "fail", "PercentageValid": 42.0},
+        "cardiac": {"QualityAssessment": "Pass", "PercentageValid": 1.0},
+        "respiratory": {"QualityAssessment": "Pass", "PercentageValid": 0.9},
     })
 
     # sub-03: physio is a dangling symlink, like a DataLad file that was never fetched
@@ -183,7 +184,7 @@ def make_nosessions(root: Path) -> None:
     write_gz(func1 / "sub-01_task-motor_physio.tsv.gz", physio_tsv(trigger_onsets(), header=True))
     write_json(root / "sub-01" / "sub-01_task-motor_physio.json", physio_sidecar(True))
     write_json(func1 / "sub-01_task-motor_desc-quality.json", {
-        "cardiac": {"QualityAssessment": "pass", "PercentageValid": 100},
+        "cardiac": {"QualityAssessment": "Pass", "PercentageValid": 1.0},
     })
 
     # sub-02: top-level physio.json, no trigger

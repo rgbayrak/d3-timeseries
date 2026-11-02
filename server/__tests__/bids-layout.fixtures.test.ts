@@ -88,8 +88,8 @@ describe('fixture: bids-sessions physio and timing', () => {
 
   it('parses the quality sidecar', () => {
     expect(read('01', '01').quality).toEqual({
-      cardiac: { assessment: 'pass', percentValid: 98.5 },
-      respiratory: { assessment: 'fail', percentValid: 42 },
+      cardiac: { assessment: 'Pass', percentValid: 1 },
+      respiratory: { assessment: 'Pass', percentValid: 0.9 },
     });
   });
 

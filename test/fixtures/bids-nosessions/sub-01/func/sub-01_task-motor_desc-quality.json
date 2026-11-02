@@ -1,6 +1,6 @@
 {
   "cardiac": {
-    "QualityAssessment": "pass",
-    "PercentageValid": 100
+    "QualityAssessment": "Pass",
+    "PercentageValid": 1.0
   }
 }
