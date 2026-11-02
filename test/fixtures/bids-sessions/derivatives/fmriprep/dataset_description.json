@@ -1,0 +1,11 @@
+{
+  "Name": "fMRIPrep outputs",
+  "BIDSVersion": "1.9.0",
+  "DatasetType": "derivative",
+  "GeneratedBy": [
+    {
+      "Name": "fMRIPrep",
+      "Version": "23.0.2"
+    }
+  ]
+}

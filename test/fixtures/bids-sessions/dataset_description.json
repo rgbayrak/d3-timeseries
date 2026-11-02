@@ -1,0 +1,10 @@
+{
+  "Name": "Synthetic physio fixture (sessions)",
+  "BIDSVersion": "1.9.0",
+  "DatasetType": "raw",
+  "License": "CC0",
+  "Authors": [
+    "Fixture Author"
+  ],
+  "DatasetDOI": "doi:10.0000/fixture.sessions"
+}

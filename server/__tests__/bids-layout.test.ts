@@ -18,11 +18,17 @@ import {
  * channel names, session labels, or subject counts.
  *
  * To add a new dataset, append an entry with { name, root }.
+ *
+ * The synthetic fixtures under test/fixtures always run; real datasets under
+ * data/ run only when they have been downloaded.
  */
 
 const BASE = join(process.cwd(), 'data');
+const FIXTURES = join(process.cwd(), 'test', 'fixtures');
 
 const datasets = [
+  { name: 'fixture: bids-sessions', root: join(FIXTURES, 'bids-sessions') },
+  { name: 'fixture: bids-nosessions', root: join(FIXTURES, 'bids-nosessions') },
   { name: 'ds006644', root: join(BASE, 'ds006644') },
   { name: 'ds000210', root: join(BASE, 'ds000210') },
 ].filter((d) => existsSync(d.root));

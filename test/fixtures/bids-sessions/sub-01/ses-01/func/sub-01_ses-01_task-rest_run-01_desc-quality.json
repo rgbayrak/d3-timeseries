@@ -1,0 +1,11 @@
+{
+  "Description": "Per-channel quality",
+  "cardiac": {
+    "QualityAssessment": "pass",
+    "PercentageValid": 98.5
+  },
+  "respiratory": {
+    "QualityAssessment": "fail",
+    "PercentageValid": 42.0
+  }
+}
