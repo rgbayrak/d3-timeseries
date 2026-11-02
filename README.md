@@ -95,6 +95,10 @@ Architecture, server API, the chart library's API reference and the TODO list ar
 
 If you use this software, please cite it using its DOI: [10.5281/zenodo.19389717](https://doi.org/10.5281/zenodo.19389717). GitHub's **Cite this repository** button (from [CITATION.cff](CITATION.cff)) gives APA and BibTeX formats.
 
+## AI disclosure
+
+Code in this repository was generated with Anthropic's Claude (Claude Opus 5.5, via Claude Code). The lead author reviewed and manually approved all changes.
+
 ## License
 
 Released under the [MIT License](LICENSE).
