@@ -24,7 +24,7 @@ install and run the tool from the README.
 
 - [ ] Installable package (`npm install -g physai-qa-interactive`, or publish to npm) with the launch command as its `bin`
 - [ ] Versioned GitHub release matching the version in `package.json` and `CITATION.cff`. A `v1.0.0` tag exists, but both files still say `0.1.0`; cut the reviewed release after Phase 2 with all three in sync
-- [ ] Zenodo archive of the release (DOI `10.5281/zenodo.19389717` exists; confirm it points at the reviewed version, or mint a new version DOI)
+- [ ] Zenodo archive of the prev release (DOI `10.5281/zenodo.19389717`) exists; mint a new version DOI for the version reviewed
 
 ## Phase 4 — Documentation (JOSS review checklist)
 
@@ -32,7 +32,7 @@ install and run the tool from the README.
 - [ ] **Installation instructions** for the packaged tool, with dependencies (Node version) listed
 - [ ] **Example usage**: a walkthrough on a public OpenNeuro dataset (fetch with DataLad, launch, review, annotate) with the expected output files
 - [ ] **API documentation** for the chart library (e.g. generated with TypeDoc) and the annotation file format
-- [ ] **Community guidelines**: how to contribute (`CONTRIBUTING.md` ✓), report issues and get support. Add issue templates and a support note
+- [ ] **Community guidelines**: how to contribute (`CONTRIBUTING.md` ✓), report issues and get support (Issues and Discussions enabled ✓). Add issue templates and a "Getting help" section in the README pointing to Discussions
 - [ ] Code of conduct (`CODE_OF_CONDUCT.md`, e.g. Contributor Covenant)
 - [ ] `CITATION.cff`: set `version` and `date-released` for the reviewed release (authors, ORCIDs and affiliations done)
 
