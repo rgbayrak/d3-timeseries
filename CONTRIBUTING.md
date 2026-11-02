@@ -46,14 +46,28 @@ src/
 ├── data/
 │   ├── bids-physio-reader.ts  # Client-side BIDS physio data fetcher
 │   └── sqi-metrics.ts         # Per-channel signal quality metrics
-├── demos/
-│   └── bids-physio-viewer.ts  # Interactive physio signal viewer
+├── viewer/                    # Interactive physio viewer (only main.ts touches the page)
+│   ├── main.ts                # Entry: init, data loading, event wiring
+│   ├── dom.ts                 # Element lookup from index.html
+│   ├── state.ts               # The single ViewerState object
+│   ├── annotations.ts         # Annotation model <-> stored JSON (pure)
+│   ├── annotation-panel.ts    # Annotation list rendering, HTML escaping
+│   ├── sqi-table.ts           # SQI column definitions, visibility, table rendering
+│   ├── info.ts                # Dataset info line, timing/quality badges
+│   ├── controls.ts            # Dropdowns, stacked-channel checkboxes
+│   ├── navigation.ts          # Prev/next stepping, search resolution (pure)
+│   ├── persistence.ts         # Last-viewed scan in localStorage
+│   └── charts/
+│       ├── shared.ts          # Line drawing, y-fit, onset marker, hover readout
+│       ├── focus-context.ts   # Focus + overview charts, brush-to-zoom, annotation boxes
+│       ├── confounds.ts       # Confound chart, FD severity coloring
+│       └── stack.ts           # Stacked channel charts
 ├── utils/
 │   ├── uid.ts              # Unique ID generator
 │   ├── margin.ts           # Margin defaults/merge
 │   ├── dom.ts              # Container resolution
 │   └── index.ts            # Barrel export
-└── main.ts                 # Entry point (loads bids-physio-viewer)
+└── main.ts                 # Entry point (loads viewer/main)
 
 server/
 ├── bids-layout.ts          # Pure BIDS filesystem logic (testable, no Vite dependency)
@@ -75,8 +89,9 @@ Browser (src/data/bids-physio-reader.ts)
 SQI (src/data/sqi-metrics.ts)
   ↓  computeSQI() — per-channel stats (mean, std, SNR, kurtosis, skewness, ZCR)
   ↓
-Viewer (src/demos/bids-physio-viewer.ts)
-  ↓  Builds focus+context+confounds charts, wires zoom/brush/hover
+Viewer (src/viewer/)
+  ↓  main.ts holds the state and wires events; charts/ builds focus+context,
+  ↓  stacked and confounds charts and keeps them on one time window
 ```
 
 ### Server API endpoints
@@ -108,6 +123,7 @@ How the server and viewer line up physio, confounds and triggers in time is desc
 - **Individual D3 modules** — `d3-scale`, `d3-axis`, `d3-selection`, etc. for tree-shaking. No monolithic `d3` import.
 - **Functional factory pattern** — no classes, composable, idiomatic D3.
 - **No component framework (Vue/React)** — vanilla D3+TS holds up as long as state stays centralized (a single object for current scan/selection/annotations) and render functions stay pure/redraw-from-state. Revisit only if hand-rolled DOM diff/patch logic becomes unavoidable, not because of codebase size alone.
+- **Viewer modules don't reach into the page** — only `src/viewer/main.ts` looks up elements and owns the `ViewerState`; every other viewer module receives elements and data as arguments and has no import-time DOM access, so its logic is unit-tested in Node (`src/viewer/__tests__/`).
 
 ---
 
