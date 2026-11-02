@@ -1,4 +1,4 @@
-import { join } from 'path';
+import { basename, join, relative, sep } from 'path';
 import type { Plugin } from 'vite';
 import {
   getSubjects,
@@ -10,8 +10,19 @@ import {
   writeAnnotations,
   buildScans,
   readDatasetInfo,
+  validateScanKey,
 } from './bids-layout';
-import type { AnnotationsFile } from './bids-layout';
+import type { AnnotationsFile, ScanKey } from './bids-layout';
+import type { ServerResponse } from 'http';
+
+/** Reply 400 and return true if any identifier is unsafe to put in a file path */
+function rejectInvalid(res: ServerResponse, key: ScanKey): boolean {
+  const error = validateScanKey(key);
+  if (!error) return false;
+  res.statusCode = 400;
+  res.end(JSON.stringify({ error }));
+  return true;
+}
 
 const BIDS_ROOT =
   process.env.BIDS_ROOT ?? join(process.cwd(), 'data', 'ds006644');
@@ -19,8 +30,22 @@ const BIDS_ROOT =
 const BIDSDER_ROOT =
   process.env.BIDSDER_ROOT ?? join(BIDS_ROOT, 'derivatives', 'fmriprep');
 
-const ANNOTATIONS_ROOT =
-  process.env.ANNOTATIONS_ROOT ?? join(process.cwd(), 'data', 'annotations');
+const DATA_DIR = join(process.cwd(), 'data');
+
+// Dataset name = first folder under data/ (data/shinobi/physprep → shinobi,
+// data/ds006644 → ds006644); outside data/, fall back to BIDS_ROOT's basename.
+function datasetName(): string {
+  if (process.env.DATASET_NAME) return process.env.DATASET_NAME;
+  const rel = relative(DATA_DIR, BIDS_ROOT);
+  if (rel && !rel.startsWith('..')) return rel.split(sep)[0];
+  return basename(BIDS_ROOT);
+}
+
+// Annotations are grouped per dataset: <annotations>/<dataset>/sub-XX/[ses-YY/]func/
+const ANNOTATIONS_ROOT = join(
+  process.env.ANNOTATIONS_ROOT ?? join(DATA_DIR, 'annotations'),
+  datasetName(),
+);
 
 export function bidsPhysioPlugin(): Plugin {
   let cachedSubjectsJson: string;
@@ -68,6 +93,7 @@ export function bidsPhysioPlugin(): Plugin {
             res.end(JSON.stringify({ error: 'Missing sub parameter' }));
             return;
           }
+          if (rejectInvalid(res, { sub, ses })) return;
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({ tasks: getTasks(BIDS_ROOT, sub, ses) }));
           return;
@@ -83,6 +109,7 @@ export function bidsPhysioPlugin(): Plugin {
             res.end(JSON.stringify({ error: 'Missing sub or task parameter' }));
             return;
           }
+          if (rejectInvalid(res, { sub, ses, task })) return;
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({ runs: getRuns(BIDS_ROOT, sub, ses, task) }));
           return;
@@ -100,6 +127,7 @@ export function bidsPhysioPlugin(): Plugin {
             res.end(JSON.stringify({ error: 'Missing sub or task parameter' }));
             return;
           }
+          if (rejectInvalid(res, { sub, ses, task, run })) return;
 
           const result = readPhysio(BIDS_ROOT, sub, ses, task, run, BIDSDER_ROOT);
           if (!result) {
@@ -125,6 +153,7 @@ export function bidsPhysioPlugin(): Plugin {
             res.end(JSON.stringify({ error: 'Missing sub or task parameter' }));
             return;
           }
+          if (rejectInvalid(res, { sub, ses, task, run })) return;
 
           const result = readConfounds(BIDS_ROOT, BIDSDER_ROOT, sub, ses, task, run);
           if (!result) {
@@ -152,6 +181,7 @@ export function bidsPhysioPlugin(): Plugin {
               res.end(JSON.stringify({ error: 'Missing sub, task, or channel parameter' }));
               return;
             }
+            if (rejectInvalid(res, { sub, ses, task, run, channel })) return;
 
             const result = readAnnotations(ANNOTATIONS_ROOT, sub, ses, task, run, channel);
             res.setHeader('Content-Type', 'application/json');
@@ -170,6 +200,8 @@ export function bidsPhysioPlugin(): Plugin {
                   res.end(JSON.stringify({ error: 'Missing sub, task, or channel in payload' }));
                   return;
                 }
+                const { sub, ses, task, run, channel } = payload;
+                if (rejectInvalid(res, { sub, ses: ses ?? '', task, run: run ?? '', channel })) return;
                 writeAnnotations(ANNOTATIONS_ROOT, payload);
                 res.setHeader('Content-Type', 'application/json');
                 res.end(JSON.stringify({ ok: true }));

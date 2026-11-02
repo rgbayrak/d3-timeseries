@@ -482,6 +482,38 @@ export interface AnnotationsFile {
   annotations: StoredAnnotation[];
 }
 
+/** BIDS labels are alphanumeric only (BIDS spec, "Entities") */
+const LABEL_RE = /^[A-Za-z0-9]+$/;
+/** Channel names are physio column names; allow _ and - but never path separators or dots */
+const CHANNEL_RE = /^[A-Za-z0-9_-]+$/;
+
+export interface ScanKey {
+  sub: string;
+  ses?: string;
+  task?: string;
+  run?: string;
+  channel?: string;
+}
+
+/**
+ * Check request-supplied identifiers before they are used to build a file
+ * path. Returns an error message, or null if every given field is safe.
+ * `ses` and `run` may be '' (session-less / run-less layouts); `sub` may not.
+ */
+export function validateScanKey(key: ScanKey): string | null {
+  if (!LABEL_RE.test(key.sub)) return `Invalid sub label: ${JSON.stringify(key.sub)}`;
+  for (const field of ['ses', 'task', 'run'] as const) {
+    const v = key[field];
+    if (v !== undefined && v !== '' && !LABEL_RE.test(v)) {
+      return `Invalid ${field} label: ${JSON.stringify(v)}`;
+    }
+  }
+  if (key.channel !== undefined && !CHANNEL_RE.test(key.channel)) {
+    return `Invalid channel name: ${JSON.stringify(key.channel)}`;
+  }
+  return null;
+}
+
 function annotationsFilePath(
   root: string,
   sub: string,
@@ -490,7 +522,12 @@ function annotationsFilePath(
   run: string,
   channel: string,
 ): string {
-  const dir = ses ? join(root, `sub-${sub}`, `ses-${ses}`) : join(root, `sub-${sub}`);
+  // Defence in depth: the server validates first, but never build a path from unchecked input
+  const error = validateScanKey({ sub, ses, task, run, channel });
+  if (error) throw new Error(error);
+  const dir = ses
+    ? join(root, `sub-${sub}`, `ses-${ses}`, 'func')
+    : join(root, `sub-${sub}`, 'func');
   let base = ses ? `sub-${sub}_ses-${ses}_task-${task}` : `sub-${sub}_task-${task}`;
   if (run) base += `_run-${run}`;
   base += `_channel-${channel}_annotations.json`;
