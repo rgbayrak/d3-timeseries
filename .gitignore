@@ -4,3 +4,6 @@ dist/
 .vite/
 .claude/
 data/ds*/
+user_facing/
+data/annotations/
+CLAUDE.md
