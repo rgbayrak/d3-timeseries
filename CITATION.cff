@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata from this file."
+type: software
+title: "physAI-QA-interactive: an interactive visualization and annotation tool for physiological recordings in BIDS fMRI datasets"
+abstract: >-
+  physAI-QA-interactive is a browser-based tool for exploring and annotating
+  physiological recordings in BIDS fMRI datasets. It lets researchers step
+  through every scan of a dataset, view physiological signals alongside
+  fMRIPrep motion confounds, compute per-channel signal quality metrics, and
+  annotate artifacts in place, saving the annotations next to the dataset.
+  It is the first released tool of physAI-QA, the quality assurance
+  component of the physAI research suite.
+authors:
+  - given-names: "Roza Gunes"
+    family-names: "Bayrak"
+    orcid: "https://orcid.org/0000-0002-7197-1248"
+    affiliation: "Electrical and Computer Engineering, Vanderbilt University, Nashville, TN 37235, United States"
+  - given-names: "Catie"
+    family-names: "Chang"
+    orcid: "https://orcid.org/0000-0003-1541-9579"
+    affiliation: "Electrical and Computer Engineering; Biomedical Engineering; Vanderbilt University Institute of Imaging Science; Vanderbilt University, Nashville, TN 37235, United States"
+version: "0.1.0"
+doi: "10.5281/zenodo.19389717"
+license: "MIT"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.19389717"
+    description: "Zenodo archive"
