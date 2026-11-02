@@ -1,1 +1,1 @@
-import './demos/bids-physio-viewer';
+import './viewer/main';
