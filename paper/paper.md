@@ -117,7 +117,7 @@ whole datasets. It has three key components:
 
 - **BIDS reader.** Discovers subjects, sessions, tasks and runs, follows BIDS
   metadata inheritance, skips files that DataLad has not yet fetched, and
-  locates fMRIPrep confounds and BOLD sidecars. Results are served to the
+  locates fMRIPrep [@esteban2019] confounds and BOLD sidecars. Results are served to the
   browser as a JSON API.
 - **Signal quality metrics.** Whole-recording statistics for every channel,
   plus windowed and beat-level metrics for cardiac [@elgendi2016; @pincus1991]
@@ -140,7 +140,8 @@ modularity (data access and metrics separate from the interface).
 
 # Software testing
 
-Automated tests cover:
+Automated tests, run by continuous integration on every push and pull request,
+cover:
 
 - **BIDS reading:** dataset discovery, sidecar lookup, and physiological and
   confound reading, on two small synthetic BIDS datasets included in the

@@ -1,34 +1,14 @@
 # JOSS submission checklist
 
-What's needed to submit physAI-QA-interactive to the
-[Journal of Open Source Software](https://joss.theoj.org/). Research features
-and improvements live in the TODO list in
-[CONTRIBUTING.md](../CONTRIBUTING.md#todo--improvements); this file only tracks
-publication readiness.
-
-**Workflow:** when an item is done, write it up in the matching section of
-[paper/paper.md](../paper/paper.md) and delete it from this list. Only open
-work stays here.
-
-## Scope: why this matters
-
-JOSS treats most web-based research tools as out of scope unless they either
-**(1) expose a core library through a web interface** (like R/Shiny apps) or
-**(2) show rigorous domain modelling and testing**. physAI-QA-interactive is
-finished as a tool, so this submission takes route (2): a modular, well-tested
-TypeScript codebase that reviewers can install and run from the README. A
-separate core library (route 1) belongs to physAI-QA-auto; see *Deferred* at
-the end.
-
----
-
 ## Phase 1 — Tests that run anywhere
 
-Fixtures, timing/SQI/annotation tests, the path-safety fix and the viewer unit
-tests are done (see *Quality control* in `paper/paper.md`).
+Fixtures, timing/SQI/annotation tests, the path-safety fix, the viewer unit
+tests and CI (passing on GitHub) are done (see the testing section in
+`paper/paper.md`).
 
-- [ ] CI workflow (`.github/workflows/ci.yml`) passing on GitHub. Passes locally (typecheck + 162 tests); not yet pushed
+- [ ] Add `npm run build` to CI once the production build is in use (Phase 2)
 - [ ] Tests for the chart library core (`createChart`, zoom, brush, `cullToViewport`, `downsample`) under jsdom (needs `jsdom` as a dev dependency)
+
 
 ## Phase 2 — Run outside the Vite dev server
 
@@ -63,18 +43,14 @@ install and run the tool from the README.
 - [ ] Date (title, tags, authors, ORCIDs and affiliations set)
 - [ ] **Summary** for a non-specialist audience. Drafted; needs your review
 - [ ] **Statement of need**: the research problem and target users. Drafted; needs your review
-- [ ] Cite "our findings" in the Statement of need (currently `[TODO: cite]`)
-- [ ] **State of the field**: drafted for phys2bids, NeuroKit2 and PhysIO from memory; verify those claims, then add peakdet, physioqc (physiopy), niphlem and bidsphysio
-- [ ] **Software design**: drafted for the current code; add the standalone server and launch command once Phase 2 lands
-- [ ] Research use: replace the ds006644 timing example with a QA example; confirm the CNeuroMod `movie10`/`shinobi` use and add any studies using the tool
-- [ ] Verify every entry in `paper.bib` written from memory and add the missing ones listed at its top
+- [ ] **Software design**: add the standalone server and launch command once Phase 2 lands
+- [ ] Research use: add any studies or labs using the tool (TODO comment in the paper)
 - [ ] Acknowledgements and funding
-- [ ] References in `paper.bib` with DOIs, including the SQI method sources cited in the code (Elgendi 2016, Romano 2023, Pincus 1991, PaPaGei)
 - [ ] Build the PDF locally or with the JOSS GitHub Action (`openjournals/openjournals-draft-action`) and check it renders
 
 ## Phase 6 — Before submitting
 
-- [ ] Repository is public, with issues enabled
+- [ ] Issues enabled on GitHub (repository is public ✓)
 - [ ] All CI checks pass on `main`
 - [ ] A fresh clone installs and runs from the README instructions alone, on a machine without `data/`
 - [ ] Authorship: everyone listed made substantial contributions; commit history reflects it
