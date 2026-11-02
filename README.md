@@ -4,6 +4,8 @@ A reusable, composable chart library built on [D3](https://d3js.org/) and TypeSc
 
 Includes built-in **zoom/pan** (`d3-zoom`), **brush selection** (`d3-brush`), **viewport culling** for performance, and a **focus+context** two-chart layout for exploring dense time-series signals.
 
+![Physio viewer demo](docs/physviz.gif)
+
 ## Quick start
 
 ```bash
@@ -361,6 +363,15 @@ Only individual D3 modules (no monolithic `d3` package):
 
 - [ ] Port the annotation UI into the FastAPI + tabbed-shell architecture below once it lands (currently lives directly in the vanilla viewer, ahead of that work)
 - [ ] Wire `trial_type == "fix"` annotations to export compact mask run-length intervals for the Artifact Correction tab: `{ channel, sampling_rate, n_samples, mask_intervals: [[start_sample, end_sample], ...] }`
+- [ ] Handle different annotators so multiple people can annotate the same scan without overwriting each other:
+  - Annotator registry in a PostgreSQL table (e.g. `annotators(id SERIAL, name TEXT UNIQUE, last_dataset, last_sub, last_ses, last_task, last_run, last_channel, updated_at)`); each annotator is assigned a number
+  - Annotator enters their name on start → look up (or create) their row → viewer resumes at their last-viewed scan (replaces the current localStorage resume)
+  - One annotation file per annotator, keyed by their number, e.g. `data/annotations/<dataset>/sub-XX/[ses-YY/]func/..._channel-C_annotator-NN_annotations.json`, with `annotator` stored in the JSON payload
+- [ ] Block unsafe file paths in the annotations endpoint — `sub`/`ses`/`task`/`run`/`channel` from the request go straight into the file path (`server/bids-physio-plugin.ts` → `annotationsFilePath`), so `sub=../../x` could read/write outside `data/annotations`; only accept letters and digits
+- [ ] Stop annotation saves from overwriting each other — every add/remove POSTs the whole file (`persistAnnotations`) with no queueing or debounce, so two fast edits can land out of order and the older one wins
+- [ ] Edit existing annotations — rename the label and drag the edges to adjust the range (currently add/delete only)
+- [ ] Fixed label list — replace the free-text `window.prompt` with a set vocabulary (`fix`, `motion`, `noise`, …) so labels stay consistent across annotators
+- [ ] Annotation progress — track which scans each annotator has marked done (ties into the annotator table above)
 
 ### Planned: FastAPI backend + 3-tab shell
 
@@ -379,11 +390,16 @@ Only individual D3 modules (no monolithic `d3` package):
 
 ### Viewer UX
 
-- [x] Enable channel selection to visualize selected channels in a vertical stack as new figures
+- [ ] Improve the y-axis by reducing the number of ticks when it gets crowded
 
 ### SQI metrics
 
 - [ ] Export SQI metric calculations as TSV
 
-### Misc
-- [ ] Write a function to convert mp4 to gif (this is for demo videos) 
+### Testing
+
+- [ ] Add a test suite that runs against every existing dataset under `data/` (`ds000210`, `ds006644`, `movie10`, `shinobi`): subject/session/task/run discovery, physio + confounds reads, scan-onset timing, dataset info, and annotation path resolution (dataset name, `func/` layout). Skip a dataset gracefully when its files aren't downloaded
+
+## License
+
+[PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0): free for personal, research, educational and other non-commercial use. Commercial use is not allowed without a separate license. See [LICENSE](LICENSE).
