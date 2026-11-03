@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>physAI-QA-interactive</title>
+  <link rel="stylesheet" href="/src/shell/tabs.css" />
   <style>
     body {
       font-family: sans-serif;
@@ -486,6 +487,11 @@
   </style>
 </head>
 <body>
+  <nav class="folder-tabs" aria-label="Sections">
+    <a class="folder-tab active" href="/" aria-current="page">Explore and Annotate</a>
+    <a class="folder-tab" href="/quality.html#group">Stats Group</a>
+    <a class="folder-tab" href="/quality.html#subject">Stats Individual</a>
+  </nav>
   <div id="controls">
     <div class="controls-row">
       <label>Subject <select id="subject-select"></select></label>

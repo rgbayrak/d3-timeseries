@@ -1,0 +1,78 @@
+/* Folder tabs shared by index.html (Explore and Annotate) and quality.html
+   (Stats Group, Stats Individual). Tabs are links or buttons with class
+   "folder-tab"; the current one also has class "active". A page can set
+   --tab-accent (stripe on the open tab; any background, e.g. a gradient) and
+   --tab-active-ink (its label colour) to take on its own theme. */
+
+.folder-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  max-width: 960px;
+  margin: 0 auto 14px;
+  padding-left: 0;
+  border-bottom: 1px solid #b9c0c6;
+}
+
+.folder-tab {
+  position: relative;
+  margin-bottom: -1px; /* sit on the bar's bottom border */
+  padding: 8px 20px 7px;
+  border: 1px solid #b9c0c6;
+  border-bottom: none;
+  border-radius: 9px 9px 0 0;
+  background: #e9edf0;
+  color: #5a636b;
+  font: 600 12px/1.2 sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* First tab starts at the left edge, square on that side */
+.folder-tab:first-child {
+  border-top-left-radius: 0;
+}
+
+.folder-tab:hover {
+  background: #dde3e7;
+  color: #222;
+}
+
+/* The open folder: white like the page, joined to it by covering the bar's border */
+.folder-tab.active {
+  background: #fff;
+  color: var(--tab-active-ink, #1f6f72);
+  border-bottom: 1px solid #fff;
+  cursor: default;
+  overflow: hidden; /* clips the stripe to the tab's rounded corners */
+}
+
+/* Stripe along the inside top edge of the open tab, exactly the tab's width */
+.folder-tab.active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--tab-accent, #2d8a8e);
+}
+
+.folder-tab:focus-visible {
+  outline: 2px solid #2d6da3;
+  outline-offset: 1px;
+}
+
+@media (max-width: 600px) {
+  .folder-tabs {
+    padding-left: 0;
+    overflow-x: auto;
+  }
+
+  .folder-tab {
+    padding: 7px 12px 6px;
+  }
+}

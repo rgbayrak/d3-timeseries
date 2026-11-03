@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>physAI-QA-interactive: quality metrics</title>
+  <link rel="stylesheet" href="/src/shell/tabs.css" />
+  <style>
+    /* Stats theme: purple and blue. Every colour on this page comes from one
+       coordinated family in src/quality/charts.ts (THEME, mirrored here, and
+       FAMILY, which feeds METRIC_GROUP_COLORS and the scatter PALETTE). Add new
+       colours from there, not new hues. Pass/fail badges keep green/amber/red. */
+    :root {
+      --violet: #7b4fd0;
+      --violet-deep: #5b34ad;
+      --violet-soft: #f1ecfd;
+      --violet-hover: #e4dafb;
+      --blue: #4a6cd4;
+      --blue-soft: #eaf0fd;
+      --ink: #231f3d;
+      --ink-2: #5b5875;
+      --ink-3: #8a86a3;
+      --line: #ddd8ee;
+      --grad: linear-gradient(90deg, var(--violet), var(--blue));
+      /* folder tabs (src/shell/tabs.css) */
+      --tab-accent: var(--grad);
+      --tab-active-ink: var(--violet-deep);
+    }
+
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: #fff;
+      color: var(--ink);
+      accent-color: var(--violet); /* checkboxes */
+    }
+
+    .page {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+    }
+
+    header label,
+    .controls label {
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    select {
+      font-size: 14px;
+      padding: 2px 6px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--ink);
+      background: #fff;
+    }
+
+    select:focus-visible,
+    button:focus-visible,
+    summary:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 1px;
+    }
+
+    /* Pill buttons; Download PDF is the one gradient (primary) action */
+    #scan-prev,
+    #scan-next {
+      font-size: 13px;
+      padding: 3px 14px;
+      cursor: pointer;
+      border: 1px solid var(--violet);
+      border-radius: 14px;
+      background: var(--violet-soft);
+      color: var(--violet-deep);
+      font-weight: 600;
+    }
+
+    #scan-prev:hover:not(:disabled),
+    #scan-next:hover:not(:disabled) {
+      background: var(--violet-hover);
+    }
+
+    #pdf-btn {
+      font-size: 13px;
+      font-weight: 600;
+      padding: 5px 16px;
+      cursor: pointer;
+      border: none;
+      border-radius: 14px;
+      background: var(--grad);
+      color: #fff;
+      box-shadow: 0 2px 6px rgba(91, 52, 173, 0.25);
+      transition: transform 0.1s, box-shadow 0.1s;
+    }
+
+    #pdf-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(91, 52, 173, 0.3);
+    }
+
+    .page .folder-tabs {
+      max-width: none;
+    }
+
+    /* Metrics picker: drop-down of checkboxes in the toolbar */
+    .metric-picker {
+      position: relative;
+      font-size: 13px;
+    }
+
+    .metric-picker > summary {
+      cursor: pointer;
+      padding: 3px 12px;
+      border: 1px solid var(--blue);
+      border-radius: 14px;
+      background: var(--blue-soft);
+      color: var(--ink);
+      list-style: none;
+      user-select: none;
+    }
+
+    .metric-picker > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .metric-picker > summary::after {
+      content: ' ▾';
+      color: var(--blue);
+    }
+
+    .metric-picker[open] > summary {
+      background: #dbe5fb;
+    }
+
+    .metric-picker-panel {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      z-index: 20;
+      width: min(560px, calc(100vw - 32px));
+      max-height: 70vh;
+      overflow: auto;
+      padding: 10px 12px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--violet);
+      border-radius: 8px;
+      box-shadow: 0 6px 18px rgba(35, 31, 61, 0.14);
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 8px 14px;
+    }
+
+    .metric-picker-actions {
+      grid-column: 1 / -1;
+      display: flex;
+      gap: 6px;
+    }
+
+    .metric-picker-actions button {
+      font-size: 12px;
+      padding: 2px 10px;
+      cursor: pointer;
+      border: 1px solid var(--violet);
+      border-radius: 12px;
+      background: var(--violet-soft);
+      color: var(--violet-deep);
+    }
+
+    .metric-picker-actions button:hover {
+      background: var(--violet-hover);
+    }
+
+    .metric-picker fieldset {
+      border: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .metric-picker legend {
+      font-weight: 600;
+      padding: 0 0 2px;
+      color: var(--violet-deep);
+    }
+
+    .metric-picker label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px !important;
+      cursor: pointer;
+    }
+
+    .metric-picker label[title] {
+      cursor: help;
+    }
+
+    /* Group colour, same as that group's histograms */
+    .metric-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      flex: none;
+    }
+
+    .pdf-option {
+      margin-left: auto;
+      font-size: 13px !important;
+      color: var(--ink-2);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    #status {
+      font-size: 13px;
+      color: #8a5a00;
+      background: #fff4e5;
+      border: 1px solid #f3d19e;
+      border-radius: 4px;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+    }
+
+    code {
+      font-size: 12px;
+      background: var(--violet-soft);
+      color: var(--violet-deep);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
+    h3 {
+      font-size: 14px;
+      margin: 20px 0 8px;
+      color: var(--ink);
+    }
+
+    /* Short divider line between sections (not before a tab's first section) */
+    h3:not(:first-child)::before {
+      content: '';
+      display: block;
+      width: 48px;
+      height: 2px;
+      margin: 8px 0 18px;
+      background: #c9c9d3;
+      border-radius: 1px;
+    }
+
+    h4 {
+      font-size: 13px;
+      margin: 14px 0 6px;
+      color: var(--ink);
+      font-weight: 600;
+    }
+
+    .muted,
+    #scatter-note {
+      font-size: 12px;
+      color: var(--ink-3);
+    }
+
+    .empty {
+      font-size: 13px;
+      color: var(--ink-3);
+      padding: 40px 0;
+      text-align: center;
+      background: var(--violet-soft);
+      border-radius: 10px;
+    }
+
+    /* Dataset info (same look as the viewer) */
+    .dataset-info {
+      font-size: 13px;
+      color: var(--ink-2);
+      margin-bottom: 8px;
+    }
+
+    .dataset-info .dataset-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .dataset-info .dataset-meta {
+      margin-top: 2px;
+    }
+
+    .dataset-info a {
+      color: var(--blue);
+    }
+
+    .summary-text {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--ink);
+      margin: 6px 0 8px;
+      max-width: 760px;
+    }
+
+    table {
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 6px;
+    }
+
+    /* Tables stay neutral: no theme colours */
+    th,
+    td {
+      border: 1px solid #ddd;
+      padding: 4px 8px;
+      white-space: nowrap;
+    }
+
+    th {
+      background: #f5f5f5;
+      color: var(--ink);
+      font-weight: 600;
+      text-align: left;
+    }
+
+    th[title] {
+      cursor: help;
+      text-decoration: underline dotted var(--ink-3);
+      text-underline-offset: 3px;
+    }
+
+    .summary-table td:not(:first-child),
+    .metrics-table td:not(:first-child) {
+      font-family: monospace;
+      text-align: right;
+    }
+
+    .metrics-wrap {
+      overflow-x: auto;
+    }
+
+    .metrics-table .pct {
+      display: block;
+      font-size: 10px;
+      color: var(--ink-3);
+    }
+
+    .failed-scans {
+      font-size: 12px;
+      margin-top: 8px;
+      color: #a33;
+    }
+
+    .controls {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 8px 0;
+    }
+
+    #scatter-chart {
+      width: 100%;
+    }
+
+    .axis path,
+    .axis line {
+      stroke: #9a95b5;
+    }
+
+    .axis text {
+      fill: var(--ink-2);
+    }
+
+    .grid line {
+      shape-rendering: crispEdges;
+    }
+
+    .grid path {
+      display: none;
+    }
+
+    .axis-label {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    #scatter-legend {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      margin: 4px 0;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Legend swatch: same colours as the scatter dots */
+    .swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .hist-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+      gap: 12px;
+    }
+
+    .hist-empty {
+      font-size: 12px;
+      color: var(--ink-3);
+    }
+
+    /* Individual tab */
+    .scan-picker {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    #subject-filename {
+      font-family: monospace;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      word-break: break-all;
+      color: var(--violet-deep);
+    }
+
+    .kv-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 18px;
+      font-size: 13px;
+    }
+
+    .kv .k {
+      color: var(--ink-3);
+      margin-right: 4px;
+    }
+
+    .kv[title] {
+      cursor: help;
+    }
+
+    .badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .quality-badge {
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+
+    .quality-badge.pass,
+    .quality-badge.timing-verified {
+      background: #e6f4ea;
+      color: #1e7e34;
+      border: 1px solid #b7e1c4;
+    }
+
+    .quality-badge.fail,
+    .quality-badge.timing-mismatch {
+      background: #fce8e6;
+      color: #c62828;
+      border: 1px solid #f5b7b1;
+    }
+
+    .quality-badge.timing-corrected,
+    .quality-badge.timing-unverified {
+      background: #fff4e5;
+      color: #8a5a00;
+      border: 1px solid #f3d19e;
+    }
+
+    .waveform-chart {
+      margin-bottom: 2px;
+    }
+
+  </style>
+</head>
+<body>
+  <div class="page">
+    <nav class="folder-tabs" aria-label="Sections">
+      <a class="folder-tab" href="/">Explore and Annotate</a>
+      <button id="tab-group" class="folder-tab active" type="button">Stats Group</button>
+      <button id="tab-subject" class="folder-tab" type="button">Stats Individual</button>
+    </nav>
+    <header>
+      <label>Dataset <select id="dataset-select"></select></label>
+      <details id="metric-picker"></details>
+      <label class="pdf-option" title="Add one page per scan with its waveforms and metrics"><input id="pdf-scans" type="checkbox" checked> Include each scan</label>
+      <button id="pdf-btn" type="button" title="Download a PDF with every plot for this dataset: summary, each channel's scatter plot and distributions, and (optionally) one page per scan">Download PDF</button>
+    </header>
+
+    <div id="status" style="display:none"></div>
+
+    <section id="group-tab">
+      <h3>Dataset overview</h3>
+      <div id="group-dataset-info" class="dataset-info"></div>
+      <div id="group-summary"></div>
+
+      <h3>Compare two metrics across all recordings</h3>
+      <div class="controls">
+        <label>Channel <select id="channel-select"></select></label>
+        <label>Y <select id="y-select"></select></label>
+        <label>X <select id="x-select"></select></label>
+        <label>Colour by <select id="color-select"></select></label>
+      </div>
+      <div class="muted">One point per recording of the selected channel. X can also be a participant variable (age, sex, …) from participants.tsv. Hover a point for details; double-click it to open that scan in the Stats Individual tab.</div>
+      <div id="scatter-chart"></div>
+      <div id="scatter-legend"></div>
+      <div id="scatter-note"></div>
+
+      <h3 id="group-hist-title">How each metric is distributed</h3>
+      <div class="muted">Dashed grey line: group mean. Hover a histogram for what the metric measures.</div>
+      <div id="group-histograms" class="hist-grid"></div>
+    </section>
+
+    <section id="subject-tab" style="display:none">
+      <div class="scan-picker">
+        <button id="scan-prev" type="button">&laquo; Prev</button>
+        <select id="scan-select"></select>
+        <button id="scan-next" type="button">Next &raquo;</button>
+      </div>
+      <div id="subject-filename"></div>
+      <div id="subject-dataset-info" class="dataset-info"></div>
+      <h3>Who was recorded</h3>
+      <div id="subject-participant"></div>
+      <h3>Recording details</h3>
+      <div id="subject-scan"></div>
+
+      <h3>Signals over the whole recording</h3>
+      <div id="subject-waveforms"></div>
+
+      <h3>Quality metrics for this scan</h3>
+      <div class="muted">Each value's percentile is among all recordings of the same channel in this dataset.</div>
+      <div id="subject-metrics-table" class="metrics-wrap"></div>
+      <div id="subject-histograms"></div>
+    </section>
+  </div>
+  <script type="module" src="/src/quality/main.ts"></script>
+</body>
+</html>
