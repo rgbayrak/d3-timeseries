@@ -4,7 +4,7 @@
 
 **An interactive visualization and annotation tool for physiological recordings in BIDS fMRI datasets.**
 
-physAI-QA-interactive lets you step through every scan of a BIDS dataset, view cardiac, respiratory and other physiological signals on one time axis anchored at scan onset, check that alignment against scanner trigger pulses, compare it with fMRIPrep motion confounds, compute per-channel signal quality metrics, and mark artifacts as annotations saved next to the dataset.
+physAI-QA-interactive lets you step through every scan of a BIDS dataset, view cardiac, respiratory and other physiological signals on one time axis anchored at scan onset, check that alignment against scanner trigger pulses, compare it with fMRIPrep motion confounds, compute per-channel signal quality metrics, and mark artifacts as annotations saved next to the dataset. A second page compares signal quality metrics across every scan of a dataset and exports them as a PDF report.
 
 It is part of **physAI**, a research suite for physiological data. This repository, **physAI-QA-interactive**, is the manual data exploration and annotation tool of **physAI-QA**, the suite's quality assurance component. Coming next: **physAI-QA-auto**, for automated artifact detection, annotation and correction.
 
@@ -34,6 +34,12 @@ Optional: `git annex adjust --unlock` checks files out as regular files instead 
 
 Open the URL Vite prints (usually `http://localhost:5173`).
 
+To use the dataset quality metrics page, compute the metrics once per dataset (see [Dataset quality metrics](#dataset-quality-metrics)):
+
+```bash
+npx vite-node scripts/compute-quality-metrics.ts ds006644
+```
+
 ## Features
 
 The app loads a BIDS physiology dataset and presents an interactive viewer with:
@@ -49,6 +55,34 @@ The app loads a BIDS physiology dataset and presents an interactive viewer with:
 - **Channel persistence** — selected channel and stacked channels are preserved when stepping through scans with Prev/Next; a reload resumes the last-viewed scan, channel, stacked channels and confound (saved per dataset in the browser's localStorage)
 - **SQI table** — on-demand per-channel signal quality metrics (mean, std dev, SNR, kurtosis, skewness, zero-crossing rate, etc.)
 - **Annotations** — toggle Annotate mode, drag on the focus chart to mark and label a time window; annotations persist to disk per `{sub, ses, task, run, channel}` and reload automatically when you return to that scan
+
+## Dataset quality metrics
+
+The app has three folder tabs at the top: **Explore and Annotate** (the viewer above, `/`), **Stats Group** and **Stats Individual** (`/quality.html`). The two Stats tabs compare signal quality metrics across every scan of a dataset.
+
+**1. Compute the metrics** (once per dataset, and again after the data or the metrics change):
+
+```bash
+npx vite-node scripts/compute-quality-metrics.ts <dataset>      # folder name under data/, e.g. ds006644
+npx vite-node scripts/compute-quality-metrics.ts mydata --bids-root /path/to/bids --deriv-root /path/to/derivatives/fmriprep
+```
+
+The script runs the same metrics as the viewer's Compute SQI button on every readable scan and writes `data/quality/<dataset>/`:
+
+- `quality_metrics.tsv`: one row per scan and physiological channel (`n/a` where a metric does not apply)
+- `dataset.json`: dataset description, scan and subject counts, `participants.tsv` and its descriptions, scans that could not be computed, and excluded channels
+- `waveforms/`: a downsampled waveform per scan for the plots
+
+Only physiological channels are computed. Column names are checked against a dictionary (`src/quality/channels.ts`; e.g. `cardiac`, `PPG`, `ECG`, `respiratory`, `RSP`, `EDA`); `trigger` and unknown columns are skipped. Datasets with the raw data in `physprep/` next to `fmriprep/` (e.g. CNeuroMod) are detected automatically. Output is deterministic: the same input gives byte-identical files.
+
+**2. Open the Stats Group tab** and pick the dataset:
+
+- **Stats Group:** dataset info and a short summary, an interactive scatter plot (pick channel, Y, X and colouring; Y is a metric, X can be a metric or a participant variable such as age or sex), and the distribution of every metric. Hover a point for details; double-click it to open that scan.
+- **Stats Individual:** file name, dataset and participant info, scan details, the waveform of each physiological channel, and each metric with its percentile and position in the group histogram.
+- **Download PDF:** builds a PDF of every plot for the dataset (summary, each channel's scatter plot and distributions, and optionally one page per scan) and downloads it.
+- **Metrics menu:** tick which metrics to show, one by one or per group (Basic, Distribution, PaPaGei, PhysioQC). Hidden metrics leave the X/Y menus, histograms, the Stats Individual table and the PDF. The choice is remembered in your browser.
+
+What each metric computes, and its source, is described in [REVIEW.md](REVIEW.md).
 
 ## Timing alignment
 
@@ -87,9 +121,11 @@ Requirements:
 
 Annotations are saved under `data/annotations/` by default; set `ANNOTATIONS_ROOT` to store them elsewhere.
 
+The quality metrics page does not use `BIDS_ROOT`: run the script with `--bids-root` (see [Dataset quality metrics](#dataset-quality-metrics)), and every dataset with computed metrics appears in the page's Dataset menu.
+
 ## Contributing
 
-Architecture, server API, the chart library's API reference and the TODO list are in [CONTRIBUTING.md](CONTRIBUTING.md).
+Architecture, server API, the chart library's API reference, how to add a metric and the TODO list are in [CONTRIBUTING.md](CONTRIBUTING.md). The metric definitions and open review items are in [REVIEW.md](REVIEW.md), and the user study task sheet is [docs/user-study.md](docs/user-study.md).
 
 ## Citation
 

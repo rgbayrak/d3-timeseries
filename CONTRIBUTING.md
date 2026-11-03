@@ -12,12 +12,15 @@ npm run dev        # Vite dev server with hot reload
 npm test           # vitest run (all tests)
 npm run test:watch # vitest in watch mode
 npm run typecheck  # tsc --noEmit (strict, no output)
-npm run build      # tsc + vite build
+npm run build      # tsc + vite build (index.html and quality.html)
+
+npx vite-node scripts/compute-quality-metrics.ts <dataset>  # dataset quality metrics -> data/quality/<dataset>/
+npx tsc -p scripts                                           # typecheck scripts/ (outside the root tsconfig)
 ```
 
 ### Tests
 
-Tests run against two tiny synthetic BIDS datasets in `test/fixtures/` (sessions/runs with fMRIPrep-style derivatives, and a session-less layout), so they need no downloaded data. They cover every timing badge, sidecar fallbacks, confounds, annotations and path safety. Regenerate the fixtures after changing them with:
+Tests run against two tiny synthetic BIDS datasets in `test/fixtures/` (sessions/runs with fMRIPrep-style derivatives, and a session-less layout), so they need no downloaded data. They cover every timing badge, sidecar fallbacks, confounds, annotations and path safety, and the dataset quality metrics pipeline (TSV round trip, identical output on reruns, physio channel dictionary, participant axes and the PDF writer). Regenerate the fixtures after changing them with:
 
 ```bash
 python3 test/fixtures/make_fixtures.py
@@ -62,6 +65,23 @@ src/
 │       ├── focus-context.ts   # Focus + overview charts, brush-to-zoom, annotation boxes
 │       ├── confounds.ts       # Confound chart, FD severity coloring
 │       └── stack.ts           # Stacked channel charts
+├── quality/                   # Dataset quality metrics page (quality.html; only main.ts touches the page)
+│   ├── main.ts                # Entry: hash route, dataset loading, PDF button
+│   ├── group-tab.ts           # Summary, scatter plot (X: metric or participant; Y: metric), distributions
+│   ├── individual-tab.ts      # One scan: header, waveforms, metrics, group histograms
+│   ├── report.ts              # PDF report: lays out pages on a canvas, rasterises the charts
+│   ├── pdf.ts                 # Minimal PDF writer (one JPEG per page, pure)
+│   ├── charts.ts              # Scatter, histogram and static waveform charts (createChart)
+│   ├── model.ts               # Labels, summaries, axis choices, scatter data (pure)
+│   ├── metrics-tsv.ts         # TSV/JSON formats shared with the script (pure)
+│   ├── channels.ts            # Physio channel dictionary (pure)
+│   ├── envelope.ts            # Min/max downsampling for waveforms (pure)
+│   ├── stats.ts               # Histogram bins, percentiles (pure)
+│   ├── route.ts               # #group / #subject?… links (pure)
+│   ├── metric-picker.ts       # Metrics drop-down: show/hide metrics per metric or group
+│   └── data.ts                # Fetches data/quality/ files
+├── shell/
+│   └── tabs.css               # Folder tabs shared by index.html and quality.html
 ├── utils/
 │   ├── uid.ts              # Unique ID generator
 │   ├── margin.ts           # Margin defaults/merge
@@ -71,7 +91,11 @@ src/
 
 server/
 ├── bids-layout.ts          # Pure BIDS filesystem logic (testable, no Vite dependency)
-└── bids-physio-plugin.ts   # Thin Vite plugin wrapper importing from bids-layout
+├── bids-physio-plugin.ts   # Thin Vite plugin wrapper importing from bids-layout
+└── quality-metrics.ts      # Dataset-wide quality metrics: computes and writes data/quality/<dataset>/
+
+scripts/
+└── compute-quality-metrics.ts  # Command-line wrapper around server/quality-metrics.ts
 ```
 
 ### Data pipeline
@@ -87,11 +111,27 @@ Browser (src/data/bids-physio-reader.ts)
   ↓  toDataPoints() / toConfoundPoints() materialize {time, value}[] arrays
   ↓
 SQI (src/data/sqi-metrics.ts)
-  ↓  computeSQI() — per-channel stats (mean, std, SNR, kurtosis, skewness, ZCR)
+  ↓  computeSQI() — 12 per-channel metrics: mean, std dev, SNR, kurtosis, skewness, ZCR,
+  ↓  PaPaGei morphology (sVRI, IPA, SQI) and PhysioQC (windowed kurtosis, ApEn, beat correlation);
+  ↓  definitions and sources in REVIEW.md
   ↓
 Viewer (src/viewer/)
   ↓  main.ts holds the state and wires events; charts/ builds focus+context,
   ↓  stacked and confounds charts and keeps them on one time window
+```
+
+Dataset quality metrics run offline and are served as static files, not through the API:
+
+```
+BIDS dataset on disk
+  ↓  scripts/compute-quality-metrics.ts → server/quality-metrics.ts
+  ↓  readPhysio() for every scan, keep physiological columns (src/quality/channels.ts), computeSQI()
+  ↓  writes data/quality/<dataset>/quality_metrics.tsv, dataset.json, waveforms/*.json
+  ↓  and adds the dataset to data/quality/index.json
+  ↓
+Browser (quality.html, src/quality/)
+  ↓  fetches /data/quality/… directly (served by Vite from the project root)
+  ↓  Stats Group tab, Stats Individual tab, PDF report
 ```
 
 ### Server API endpoints
@@ -123,7 +163,24 @@ How the server and viewer line up physio, confounds and triggers in time is desc
 - **Individual D3 modules** — `d3-scale`, `d3-axis`, `d3-selection`, etc. for tree-shaking. No monolithic `d3` import.
 - **Functional factory pattern** — no classes, composable, idiomatic D3.
 - **No component framework (Vue/React)** — vanilla D3+TS holds up as long as state stays centralized (a single object for current scan/selection/annotations) and render functions stay pure/redraw-from-state. Revisit only if hand-rolled DOM diff/patch logic becomes unavoidable, not because of codebase size alone.
-- **Viewer modules don't reach into the page** — only `src/viewer/main.ts` looks up elements and owns the `ViewerState`; every other viewer module receives elements and data as arguments and has no import-time DOM access, so its logic is unit-tested in Node (`src/viewer/__tests__/`).
+- **Viewer modules don't reach into the page** — only `src/viewer/main.ts` looks up elements and owns the `ViewerState`; every other viewer module receives elements and data as arguments and has no import-time DOM access, so its logic is unit-tested in Node (`src/viewer/__tests__/`). The quality page follows the same rule: only `src/quality/main.ts` touches `quality.html`, and the pure modules are tested in `src/quality/__tests__/`.
+
+---
+
+## Quality metrics: adding or removing a metric
+
+A metric is computed in one place and listed in three:
+
+1. **Compute it** in `computeChannelMetrics()` (`src/data/sqi-metrics.ts`) and add the field to the `ChannelMetrics` interface. Return `NaN` when it does not apply to a channel.
+2. **Label it** in `SQI_COLUMNS` (`src/viewer/sqi-table.ts`): label, decimals, description and group. Both the viewer's SQI table and the quality page use these labels.
+3. **Give it a TSV column** in `METRIC_COLUMNS` (`src/quality/metrics-tsv.ts`), in snake_case. The column order there is the TSV column order.
+4. **Document it** in [REVIEW.md](REVIEW.md): what it computes, which channels it applies to, and its citation.
+5. **Test it** in `src/data/__tests__/sqi-metrics.test.ts` with a synthetic signal of known value.
+6. **Rerun the script** for every dataset. `parseQualityTsv` refuses a TSV that lacks a column listed in `METRIC_COLUMNS`, so old outputs stop loading until they are recomputed.
+
+To remove a metric, delete it from the same places. The quality page builds its scatter axes and histograms from the metrics that have values in the TSV for each channel, so no plot code changes are needed either way.
+
+To accept a new physio column name (e.g. a vendor-specific label), add it to `PHYSIO_CHANNELS` in `src/quality/channels.ts` with its signal type. Names are matched without case, separators or a trailing number. Columns that are not physiological belong in `NON_PHYSIO_CHANNELS`.
 
 ---
 
@@ -338,25 +395,21 @@ Research features and improvements. Publication readiness (license, packaging, d
 
 - [ ] Scaffold FastAPI backend service (shared backend for tabs 2 & 3)
 - [ ] Add tabbed navigation shell: Visualization & Annotation / Summary Statistics / Artifact Correction
-- [ ] Tab 2 — Summary Statistics: new (non-SQI) computation + API contract, generation endpoint, interactive scatter/bar plots
+- [ ] Tab 2 — Summary Statistics: new (non-SQI) computation + API contract, generation endpoint, interactive scatter/bar plots. The dataset-wide SQI part now exists as `quality.html` (see Quality metrics below), served as static files without a backend; fold it into the tab shell when that lands
 - [ ] Tab 3 — Artifact Correction: wrap the existing correction model in an endpoint; brush a window → request fix → visualize before/after signal
 - [ ] Tests for tabs 2 & 3
 
 ### Performance & data pipeline
 
-- [ ] Downsample focus-chart line rendering — currently draws every raw sample in the visible domain (1M+ points at full zoom-out for 1000–5000 Hz recordings); only the context chart is downsampled today. Needs a min/max-per-bucket downsampler (a naive stride, like `viewportCulling.ts` uses now, would clip cardiac spikes), targeting ~2-4k rendered points at any zoom level
+- [ ] Downsample focus-chart line rendering — currently draws every raw sample in the visible domain (1M+ points at full zoom-out for 1000–5000 Hz recordings); only the context chart is downsampled today. Needs a min/max-per-bucket downsampler (a naive stride, like `viewportCulling.ts` uses now, would clip cardiac spikes), targeting ~2-4k rendered points at any zoom level. `minMaxEnvelope()` in `src/quality/envelope.ts` already does this for the quality page's waveforms
 - [ ] Cache parsed physio/confounds reads server-side — `server/bids-physio-plugin.ts` re-parses (sync gunzip + full TSV parse) on every request, even when revisiting a scan just seen; add an in-memory cache keyed by sub/ses/task/run
 - [ ] Support custom signals those computations by convolving physiological response functions (Birn et al. 2006/2008 respiration-BOLD, Chang & Glover 2009 cardiac/respiratory response functions)
-- [ ] Production build, the server plugin only works in Vite dev mode; the FastAPI backend planned above should supersede this, otherwise would need an Express/Fastify server for production
+- [ ] Production build, the server plugin only works in Vite dev mode; the FastAPI backend planned above should supersede this, otherwise would need an Express/Fastify server for production. That server must also serve `data/quality/` for the quality page
 
 ### Viewer UX
 
 - [ ] Improve the y-axis by reducing the number of ticks when it gets crowded
 
-### SQI metrics
-
-- [ ] Export SQI metric calculations as TSV
-
 ### Testing
 
-- [ ] Add a test suite that runs against every existing dataset under `data/` (`ds000210`, `ds006644`, `movie10`, `shinobi`): subject/session/task/run discovery, physio + confounds reads, scan-onset timing, dataset info, and annotation path resolution (dataset name, `func/` layout). Skip a dataset gracefully when its files aren't downloaded
+- [ ] Add a test suite that runs against every existing dataset under `data/` (`ds000210`, `ds006644`, `movie10`, `shinobi`): subject/session/task/run discovery, physio + confounds reads, scan-onset timing, dataset info, and annotation path resolution (dataset name, `func/` layout). Skip a dataset gracefully when its files aren't downloaded. `server/__tests__/bids-layout.test.ts` already covers `ds006644` and `ds000210`; `movie10` and `shinobi` (raw data in `physprep/`) are still missing
