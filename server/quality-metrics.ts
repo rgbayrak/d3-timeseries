@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { getSubjects, buildScans, readPhysio, readDatasetInfo, isReadable } from './bids-layout';
+import { getSubjects, buildScans, readPhysio, readDatasetInfo, isReadable, findPhysioFiles } from './bids-layout';
 import type { ScanEntry } from './bids-layout';
 import { computeSQI } from '../src/data/sqi-metrics';
 import { minMaxEnvelope, roundSig } from '../src/quality/envelope';
@@ -203,6 +203,26 @@ export function readParticipants(bidsRoot: string): ParticipantsTable | null {
 
 const byNumeric = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
 
+/**
+ * Units of a scan's columns from its physio sidecar, where it describes a
+ * column as an object with a string "Units" (e.g. "cardiac": {"Units": "mV"}).
+ */
+export function readChannelUnits(bidsRoot: string, scan: ScanEntry): Record<string, string> {
+  const found = findPhysioFiles(bidsRoot, scan.sub, scan.ses, scan.task, scan.run);
+  if (!found?.sidecarPath) return {};
+  try {
+    const sidecar = JSON.parse(readFileSync(found.sidecarPath, 'utf-8')) as Record<string, unknown>;
+    const units: Record<string, string> = {};
+    for (const [key, value] of Object.entries(sidecar)) {
+      const u = (value as { Units?: unknown } | null)?.Units;
+      if (value && typeof value === 'object' && typeof u === 'string' && u.trim() !== '') units[key] = u.trim();
+    }
+    return units;
+  } catch {
+    return {};
+  }
+}
+
 export interface QualityRunOptions {
   /** Folder holding the datasets, normally <project>/data */
   dataDir: string;
@@ -248,6 +268,7 @@ export function runQualityMetrics(opts: QualityRunOptions): QualityRunResult {
   const rates = new Set<number>();
   const subjectsWithRows = new Set<string>();
   const excludedCounts = new Map<string, { reason: string; scans: number }>();
+  const channelUnits = new Map<string, string>();
 
   scans.forEach((scan, i) => {
     const id = scanId(scan);
@@ -271,6 +292,11 @@ export function runQualityMetrics(opts: QualityRunOptions): QualityRunResult {
       }
       rows.push(...scanRows);
       scanRows.forEach((r) => channels.add(r.channel));
+      // First unit seen for a channel wins (scans are in sorted order, so this is deterministic)
+      const units = readChannelUnits(paths.bidsRoot, scan);
+      for (const r of scanRows) {
+        if (units[r.channel] && !channelUnits.has(r.channel)) channelUnits.set(r.channel, units[r.channel]);
+      }
       tasks.add(scan.task);
       rates.add(raw.samplingFrequency);
       subjectsWithRows.add(scan.sub);
@@ -297,6 +323,7 @@ export function runQualityMetrics(opts: QualityRunOptions): QualityRunResult {
     excludedChannels: [...excludedCounts]
       .map(([channel, v]) => ({ channel, reason: v.reason, scans: v.scans }))
       .sort((a, b) => byNumeric(a.channel, b.channel)),
+    channelUnits: Object.fromEntries([...channelUnits].sort((a, b) => byNumeric(a[0], b[0]))),
     metricsFile: METRICS_TSV_NAME,
   };
 

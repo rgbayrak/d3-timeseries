@@ -55,6 +55,7 @@ describe('runQualityMetrics (bids-sessions fixture)', () => {
     expect(summary.tasks).toEqual(['rest']);
     expect(summary.info.name).toBe('Synthetic physio fixture (sessions)');
     expect(summary.participants).toBeNull();
+    expect(summary.channelUnits).toEqual({}); // fixture sidecars give no units
     expect(existsSync(join(outDir, METRICS_TSV_NAME))).toBe(true);
     expect(existsSync(join(outDir, DATASET_JSON_NAME))).toBe(true);
   });
@@ -184,7 +185,10 @@ describe('participants', () => {
     for (const f of ['sub-01_task-motor_physio.tsv.gz', 'sub-01_task-motor_desc-quality.json']) {
       writeFileSync(join(ds, 'sub-01', 'func', f), readFileSync(join(src, 'sub-01', 'func', f)));
     }
-    writeFileSync(join(ds, 'sub-01', 'sub-01_task-motor_physio.json'), readFileSync(join(src, 'sub-01', 'sub-01_task-motor_physio.json')));
+    // Subject sidecar with a unit for one column, to check channelUnits
+    const sidecar = JSON.parse(readFileSync(join(src, 'sub-01', 'sub-01_task-motor_physio.json'), 'utf-8'));
+    sidecar.cardiac = { Description: 'pulse oximeter', Units: 'mV' };
+    writeFileSync(join(ds, 'sub-01', 'sub-01_task-motor_physio.json'), JSON.stringify(sidecar));
     writeFileSync(join(ds, 'participants.tsv'), 'participant_id\tage\tsex\nsub-01\t32\tf\n');
     writeFileSync(
       join(ds, 'participants.json'),
@@ -197,6 +201,7 @@ describe('participants', () => {
       meta: { age: { description: 'age', units: 'years' }, sex: { levels: { f: 'female' } } },
       rows: { '01': { age: '32', sex: 'f' } },
     });
+    expect(summary.channelUnits).toEqual({ cardiac: 'mV' });
     rmSync(dir, { recursive: true, force: true });
   });
 });
