@@ -145,19 +145,21 @@ describe('stats', () => {
 
 describe('routes', () => {
   it('defaults to the group tab', () => {
-    expect(parseRoute('')).toEqual({ tab: 'group', dataset: null });
-    expect(parseRoute('#nonsense')).toEqual({ tab: 'group', dataset: null });
+    expect(parseRoute('')).toEqual({ tab: 'group' });
+    expect(parseRoute('#nonsense')).toEqual({ tab: 'group' });
   });
 
   it('round-trips a subject route', () => {
-    const route = { tab: 'subject' as const, dataset: 'ds006644', scan: { sub: '01', ses: '02', task: 'rest', run: '' } };
+    const route = { tab: 'subject' as const, scan: { sub: '01', ses: '02', task: 'rest', run: '' } };
     const hash = routeHash(route);
-    expect(hash).toBe('#subject?dataset=ds006644&sub=01&ses=02&task=rest');
+    expect(hash).toBe('#subject?sub=01&ses=02&task=rest');
     expect(parseRoute(hash)).toEqual(route);
   });
 
-  it('leaves scan null without sub and task', () => {
-    expect(parseRoute('#subject?dataset=x')).toEqual({ tab: 'subject', dataset: 'x', scan: null });
+  it('leaves scan null without sub and task, and ignores old dataset links', () => {
+    expect(parseRoute('#subject')).toEqual({ tab: 'subject', scan: null });
+    expect(parseRoute('#subject?dataset=x')).toEqual({ tab: 'subject', scan: null });
+    expect(routeHash({ tab: 'subject', scan: null })).toBe('#subject');
   });
 });
 

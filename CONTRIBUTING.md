@@ -79,7 +79,8 @@ src/
 │   ├── stats.ts               # Histogram bins, percentiles (pure)
 │   ├── route.ts               # #group / #subject?… links (pure)
 │   ├── metric-picker.ts       # Metrics drop-down: show/hide metrics per metric or group
-│   └── data.ts                # Fetches data/quality/ files
+│   ├── linked-scan.ts         # Shares the open scan with Explore and Annotate (via its localStorage entry)
+│   └── data.ts                # Fetches the served dataset's data/quality/ files
 ├── shell/
 │   └── tabs.css               # Folder tabs shared by index.html and quality.html
 ├── utils/
@@ -127,10 +128,10 @@ BIDS dataset on disk
   ↓  scripts/compute-quality-metrics.ts → server/quality-metrics.ts
   ↓  readPhysio() for every scan, keep physiological columns (src/quality/channels.ts), computeSQI()
   ↓  writes data/quality/<dataset>/quality_metrics.tsv, dataset.json, waveforms/*.json
-  ↓  and adds the dataset to data/quality/index.json
   ↓
 Browser (quality.html, src/quality/)
-  ↓  fetches /data/quality/… directly (served by Vite from the project root)
+  ↓  asks /api/bids/dataset which dataset the server serves (its `id`), then
+  ↓  fetches /data/quality/<id>/… directly (served by Vite from the project root)
   ↓  Stats Group tab, Stats Individual tab, PDF report
 ```
 
@@ -139,7 +140,7 @@ Browser (quality.html, src/quality/)
 | Endpoint | Description |
 |---|---|
 | `GET /api/bids/subjects` | All subjects with their sessions (only those with readable physio files) |
-| `GET /api/bids/dataset` | Dataset metadata from `dataset_description.json` (raw + derivatives `GeneratedBy`) |
+| `GET /api/bids/dataset` | Dataset metadata from `dataset_description.json` (raw + derivatives `GeneratedBy`), plus `id`: the dataset's folder name under `data/` |
 | `GET /api/bids/scans` | Flat list of every readable `{sub, ses, task, run}` in hierarchy order |
 | `GET /api/bids/tasks?sub=&ses=` | Tasks available for a given subject/session |
 | `GET /api/bids/runs?sub=&ses=&task=` | Runs available for a given subject/session/task |
@@ -409,6 +410,18 @@ Research features and improvements. Publication readiness (license, packaging, d
 ### Viewer UX
 
 - [ ] Improve the y-axis by reducing the number of ticks when it gets crowded
+
+### BIDS discovery (bottom-up)
+
+- [ ] Find files bottom-up instead of assuming fixed paths under `BIDS_ROOT` (today: `<root>/sub-XX/[ses-YY/]func/`, sidecars at three fixed spots, derivatives at `<root>/derivatives/fmriprep`, plus the `physprep/` → `fmriprep/` special case in `resolveBidsRoots`):
+  - Walk the given folder once at server start (skip hidden folders like `.git`, `.datalad`) and index every `*_physio.tsv.gz` (readable only), `*physio.json`, `*_desc-quality.json`, `*_bold.json`, `*_desc-confounds_timeseries.tsv[.gz]` and `dataset_description.json`
+  - Take sub/ses/task/run from each file's name, not its folder, so files are found wherever they sit (extra levels, no `func/`)
+  - Sidecars by BIDS inheritance: a sidecar applies if it sits in the data file's folder or above and its entities are a subset of the file's; nearer/more specific wins, values merged
+  - Confounds and BOLD timing matched on sub/ses/task/run (run numeric) anywhere in the index; `BIDSDER_ROOT` becomes optional and `resolveBidsRoots` goes away
+  - Raw dataset info from the `dataset_description.json` nearest above the physio files, derivatives info from the one above the confounds
+  - Same function signatures and API outputs, so the viewer, Stats tabs and metrics script don't change
+  - Defaults to confirm: same scan with raw and `desc-preproc` physio → prefer preprocessed; search only inside the given folder (no sibling folders)
+- [ ] Tests for it (`server/__tests__/bids-discovery.test.ts`, temp-folder datasets, never `data/`): CNeuroMod layout given by its parent folder; physio outside `func/` and extra nesting; sidecar inheritance (subject, session, run-less, top-level; most specific wins, merged); numeric run matching and mixed run/run-less; broken symlinks and hidden folders skipped; a root without physio returns no scans instead of crashing; existing fixture and real-dataset tests still pass
 
 ### Testing
 

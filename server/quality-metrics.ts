@@ -1,6 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { getSubjects, buildScans, readPhysio, readDatasetInfo, isReadable, findPhysioFiles } from './bids-layout';
+import {
+  getSubjects,
+  buildScans,
+  readPhysio,
+  readDatasetInfo,
+  isReadable,
+  findPhysioFiles,
+  resolveBidsRoots,
+} from './bids-layout';
 import type { ScanEntry } from './bids-layout';
 import { computeSQI } from '../src/data/sqi-metrics';
 import { minMaxEnvelope, roundSig } from '../src/quality/envelope';
@@ -11,7 +19,6 @@ import {
   METRICS_TSV_NAME,
   DATASET_JSON_NAME,
   WAVEFORMS_DIR,
-  INDEX_JSON_NAME,
   rowsToTsv,
   scanId,
 } from '../src/quality/metrics-tsv';
@@ -22,7 +29,6 @@ import type {
   ParticipantsTable,
   ParticipantColumnMeta,
   WaveformFile,
-  QualityIndexFile,
 } from '../src/quality/metrics-tsv';
 
 // Dataset-wide quality metrics: runs the same per-channel metrics as the
@@ -56,21 +62,8 @@ export function resolveDatasetPaths(
   if (!DATASET_NAME_RE.test(dataset)) {
     throw new Error(`Invalid dataset name "${dataset}" (letters, digits, '.', '_' and '-' only)`);
   }
-  const base = join(dataDir, dataset);
-  let bidsRoot = overrides.bidsRoot ?? base;
-  if (
-    !overrides.bidsRoot &&
-    !existsSync(join(base, 'dataset_description.json')) &&
-    existsSync(join(base, 'physprep'))
-  ) {
-    bidsRoot = join(base, 'physprep');
-  }
-
-  let derivRoot = overrides.derivRoot;
-  if (!derivRoot) {
-    const candidates = [join(bidsRoot, 'derivatives', 'fmriprep'), join(base, 'fmriprep')];
-    derivRoot = candidates.find((c) => existsSync(c)) ?? candidates[0];
-  }
+  // Same physprep/fmriprep lookup as the dev server (server/bids-layout.ts)
+  const { bidsRoot, derivRoot } = resolveBidsRoots(overrides.bidsRoot ?? join(dataDir, dataset), overrides.derivRoot);
   return { dataset, bidsRoot, derivRoot };
 }
 
@@ -329,26 +322,7 @@ export function runQualityMetrics(opts: QualityRunOptions): QualityRunResult {
 
   writeFileSync(join(outDir, METRICS_TSV_NAME), rowsToTsv(rows));
   writeFileSync(join(outDir, DATASET_JSON_NAME), JSON.stringify(summary, null, 2) + '\n');
-  updateIndex(outRoot, paths.dataset);
   log(`Wrote ${rows.length} rows to ${join(outDir, METRICS_TSV_NAME)}`);
 
   return { outDir, rows, summary };
-}
-
-/** Add the dataset to <outRoot>/index.json (sorted, no duplicates) */
-export function updateIndex(outRoot: string, dataset: string): QualityIndexFile {
-  const path = join(outRoot, INDEX_JSON_NAME);
-  let datasets: string[] = [];
-  if (existsSync(path)) {
-    try {
-      const parsed = JSON.parse(readFileSync(path, 'utf-8')) as Partial<QualityIndexFile>;
-      if (Array.isArray(parsed.datasets)) datasets = parsed.datasets.filter((d) => typeof d === 'string');
-    } catch {
-      // rebuild a malformed index
-    }
-  }
-  const index = { datasets: [...new Set([...datasets, dataset])].sort(byNumeric) };
-  mkdirSync(outRoot, { recursive: true });
-  writeFileSync(path, JSON.stringify(index, null, 2) + '\n');
-  return index;
 }

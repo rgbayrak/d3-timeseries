@@ -2,11 +2,10 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtempSync, mkdirSync, readFileSync, existsSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { buildScans, getSubjects, readPhysio } from '../bids-layout';
+import { buildScans, getSubjects, readPhysio, resolveBidsRoots } from '../bids-layout';
 import {
   runQualityMetrics,
   resolveDatasetPaths,
-  updateIndex,
   waveformFile,
   physioChannels,
   scanQualityRows,
@@ -137,16 +136,6 @@ describe('runQualityMetrics (bids-nosessions fixture)', () => {
   });
 });
 
-describe('updateIndex', () => {
-  it('keeps datasets sorted and unique', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'quality-index-'));
-    updateIndex(dir, 'shinobi');
-    updateIndex(dir, 'ds006644');
-    expect(updateIndex(dir, 'shinobi')).toEqual({ datasets: ['ds006644', 'shinobi'] });
-    rmSync(dir, { recursive: true, force: true });
-  });
-});
-
 describe('resolveDatasetPaths', () => {
   it('rejects names that could leave the data folder', () => {
     expect(() => resolveDatasetPaths(FIXTURES, '../etc')).toThrow(/Invalid dataset name/);
@@ -162,6 +151,18 @@ describe('resolveDatasetPaths', () => {
       bidsRoot: join(dir, 'shinobi', 'physprep'),
       derivRoot: join(dir, 'shinobi', 'fmriprep'),
     });
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('gives the dev server the same roots for the dataset folder or its physprep/', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'quality-roots-'));
+    mkdirSync(join(dir, 'shinobi', 'physprep'), { recursive: true });
+    mkdirSync(join(dir, 'shinobi', 'fmriprep'), { recursive: true });
+    const expected = { bidsRoot: join(dir, 'shinobi', 'physprep'), derivRoot: join(dir, 'shinobi', 'fmriprep') };
+    expect(resolveBidsRoots(join(dir, 'shinobi'))).toEqual(expected);
+    expect(resolveBidsRoots(join(dir, 'shinobi', 'physprep'))).toEqual(expected);
+    // an explicit derivatives root wins
+    expect(resolveBidsRoots(join(dir, 'shinobi'), '/elsewhere').derivRoot).toBe('/elsewhere');
     rmSync(dir, { recursive: true, force: true });
   });
 

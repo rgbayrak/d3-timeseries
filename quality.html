@@ -441,6 +441,12 @@
       margin-bottom: 10px;
     }
 
+    .open-viewer {
+      margin-left: auto;
+      font-size: 13px;
+      color: var(--blue);
+    }
+
     #subject-filename {
       font-family: monospace;
       font-size: 14px;
@@ -515,7 +521,6 @@
       <button id="tab-subject" class="folder-tab" type="button">Stats Individual</button>
     </nav>
     <header>
-      <label>Dataset <select id="dataset-select"></select></label>
       <details id="metric-picker"></details>
       <label class="pdf-option" title="Add one page per scan with its waveforms and metrics"><input id="pdf-scans" type="checkbox" checked> Include each scan</label>
       <button id="pdf-btn" type="button" title="Download a PDF with every plot for this dataset: summary, each channel's scatter plot and distributions, and (optionally) one page per scan">Download PDF</button>
@@ -550,6 +555,7 @@
         <button id="scan-prev" type="button">&laquo; Prev</button>
         <select id="scan-select"></select>
         <button id="scan-next" type="button">Next &raquo;</button>
+        <a class="open-viewer" href="/" title="Explore and Annotate opens on the scan shown here">Open this scan in Explore and Annotate &rarr;</a>
       </div>
       <div id="subject-filename"></div>
       <div id="subject-dataset-info" class="dataset-info"></div>

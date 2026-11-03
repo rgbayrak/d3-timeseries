@@ -10,6 +10,7 @@ import {
   writeAnnotations,
   buildScans,
   readDatasetInfo,
+  resolveBidsRoots,
   validateScanKey,
 } from './bids-layout';
 import type { AnnotationsFile, ScanKey } from './bids-layout';
@@ -24,11 +25,13 @@ function rejectInvalid(res: ServerResponse, key: ScanKey): boolean {
   return true;
 }
 
-const BIDS_ROOT =
-  process.env.BIDS_ROOT ?? join(process.cwd(), 'data', 'ds006644');
-
-const BIDSDER_ROOT =
-  process.env.BIDSDER_ROOT ?? join(BIDS_ROOT, 'derivatives', 'fmriprep');
+// BIDS_ROOT may be the dataset folder or its physprep/ (data/shinobi and
+// data/shinobi/physprep both work); derivatives default to derivatives/fmriprep,
+// or fmriprep/ next to physprep/. BIDSDER_ROOT overrides.
+const { bidsRoot: BIDS_ROOT, derivRoot: BIDSDER_ROOT } = resolveBidsRoots(
+  process.env.BIDS_ROOT ?? join(process.cwd(), 'data', 'ds006644'),
+  process.env.BIDSDER_ROOT,
+);
 
 const DATA_DIR = join(process.cwd(), 'data');
 
@@ -63,7 +66,14 @@ export function bidsPhysioPlugin(): Plugin {
         `[bids-physio] Cached ${subjects.length} subjects, ${scans.length} scans from ${BIDS_ROOT}`,
       );
       console.log(`[bids-physio] Derivatives root: ${BIDSDER_ROOT}`);
-      cachedDatasetJson = JSON.stringify(readDatasetInfo(BIDS_ROOT, BIDSDER_ROOT));
+      if (scans.length === 0) {
+        console.warn(
+          `[bids-physio] No readable physio files under ${BIDS_ROOT}. Check BIDS_ROOT, ` +
+            'and that the *_physio.tsv.gz files have been downloaded (datalad get).',
+        );
+      }
+      // `id` is the folder name under data/ (e.g. ds006644); the Stats tabs use it to find data/quality/<id>/
+      cachedDatasetJson = JSON.stringify({ ...readDatasetInfo(BIDS_ROOT, BIDSDER_ROOT), id: datasetName() });
 
       server.middlewares.use((req, res, next) => {
         if (req.url === '/api/bids/subjects') {

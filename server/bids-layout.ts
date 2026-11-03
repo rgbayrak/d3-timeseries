@@ -557,6 +557,24 @@ export function writeAnnotations(root: string, payload: AnnotationsFile): void {
   writeFileSync(filePath, JSON.stringify(payload, null, 2));
 }
 
+/**
+ * Raw and derivatives roots for a dataset folder. Handles plain BIDS
+ * (data/ds006644, derivatives in derivatives/fmriprep) and layouts that keep
+ * the raw data in physprep/ next to fmriprep/ (CNeuroMod: data/shinobi →
+ * data/shinobi/physprep + data/shinobi/fmriprep). Passing the physprep folder
+ * itself works too. An explicit derivatives root always wins.
+ */
+export function resolveBidsRoots(root: string, derivOverride?: string): { bidsRoot: string; derivRoot: string } {
+  const bidsRoot =
+    !existsSync(join(root, 'dataset_description.json')) && existsSync(join(root, 'physprep'))
+      ? join(root, 'physprep')
+      : root;
+  if (derivOverride) return { bidsRoot, derivRoot: derivOverride };
+  const candidates = [join(bidsRoot, 'derivatives', 'fmriprep')];
+  if (basename(bidsRoot) === 'physprep') candidates.push(join(dirname(bidsRoot), 'fmriprep'));
+  return { bidsRoot, derivRoot: candidates.find((c) => existsSync(c)) ?? candidates[0] };
+}
+
 export function buildScans(bidsRoot: string, subjects: SubjectInfo[]): ScanEntry[] {
   const scans: ScanEntry[] = [];
   for (const subj of subjects) {

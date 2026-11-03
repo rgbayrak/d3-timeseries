@@ -35,8 +35,8 @@ export interface IndividualTabElements {
 }
 
 export interface IndividualTab {
-  /** Show one scan of a loaded dataset (first scan when scan is null) */
-  show: (dataset: string, data: LoadedDataset, scan: ScanKeyLike | null) => void;
+  /** Show one scan of a loaded dataset (first scan when scan is null); returns the scan shown */
+  show: (dataset: string, data: LoadedDataset, scan: ScanKeyLike | null) => ScanKeyLike | null;
 }
 
 function participantHtml(table: ParticipantsTable | null, sub: string): string {
@@ -220,7 +220,7 @@ export function createIndividualTab(
         els.waveforms.innerHTML = '';
         els.metricsTable.innerHTML = '<div class="muted">This dataset has no scans with metrics.</div>';
         els.histograms.innerHTML = '';
-        return;
+        return null;
       }
       const notice =
         scan && !sameScanKey(current, scan)
@@ -234,6 +234,7 @@ export function createIndividualTab(
       els.metricsTable.innerHTML = metricsTableHtml(scanRows, data.rows, getVisible());
       histogramsFor(scanRows, data.rows, data.summary.channelUnits);
       void waveformsFor(dataset, current, id, data.summary.channelUnits);
+      return current;
     },
   };
 }

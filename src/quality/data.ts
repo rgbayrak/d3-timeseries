@@ -1,21 +1,10 @@
-import {
-  DATASET_JSON_NAME,
-  INDEX_JSON_NAME,
-  METRICS_TSV_NAME,
-  WAVEFORMS_DIR,
-  parseQualityTsv,
-  scanId,
-} from './metrics-tsv';
-import type {
-  DatasetQualityFile,
-  QualityIndexFile,
-  QualityRow,
-  ScanKeyLike,
-  WaveformFile,
-} from './metrics-tsv';
+import { DATASET_JSON_NAME, METRICS_TSV_NAME, WAVEFORMS_DIR, parseQualityTsv, scanId } from './metrics-tsv';
+import type { DatasetQualityFile, QualityRow, ScanKeyLike, WaveformFile } from './metrics-tsv';
 
 // Loads the static files written by scripts/compute-quality-metrics.ts. The
 // dev server serves them from data/quality/ directly; no API endpoint needed.
+// Which dataset to show comes from the dev server (/api/bids/dataset), so the
+// Stats tabs always match Explore and Annotate.
 
 const QUALITY_BASE = '/data/quality';
 
@@ -40,9 +29,18 @@ async function fetchJson<T>(url: string): Promise<T | null> {
   }
 }
 
-export async function fetchQualityIndex(): Promise<string[]> {
-  const index = await fetchJson<QualityIndexFile>(`${QUALITY_BASE}/${INDEX_JSON_NAME}`);
-  return Array.isArray(index?.datasets) ? index.datasets : [];
+export interface ServedDataset {
+  /** Folder name under data/ (e.g. ds006644): where its quality metrics live */
+  id: string;
+  /** Name from dataset_description.json; the viewer keys its remembered scan on it */
+  name: string | null;
+}
+
+/** The dataset the dev server is serving (BIDS_ROOT); null if the server can't say */
+export async function fetchServedDataset(): Promise<ServedDataset | null> {
+  const info = await fetchJson<{ id?: unknown; name?: unknown }>('/api/bids/dataset');
+  if (!info || typeof info.id !== 'string' || info.id === '') return null;
+  return { id: info.id, name: typeof info.name === 'string' ? info.name : null };
 }
 
 export interface LoadedDataset {

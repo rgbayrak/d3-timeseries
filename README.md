@@ -75,7 +75,7 @@ The script runs the same metrics as the viewer's Compute SQI button on every rea
 
 Only physiological channels are computed. Column names are checked against a dictionary (`src/quality/channels.ts`; e.g. `cardiac`, `PPG`, `ECG`, `respiratory`, `RSP`, `EDA`); `trigger` and unknown columns are skipped. Datasets with the raw data in `physprep/` next to `fmriprep/` (e.g. CNeuroMod) are detected automatically. Output is deterministic: the same input gives byte-identical files.
 
-**2. Open the Stats Group tab** and pick the dataset:
+**2. Open the Stats Group tab.** All three tabs show the dataset the dev server is serving (`BIDS_ROOT`, see [Using your own dataset](#using-your-own-dataset)). The scan open in Explore and Annotate is the one Stats Individual opens, and the other way round.
 
 - **Stats Group:** dataset info and a short summary, an interactive scatter plot (pick channel, Y, X and colouring; Y is a metric, X can be a metric or a participant variable such as age or sex), and the distribution of every metric. Hover a point for details; double-click it to open that scan.
 - **Stats Individual:** file name, dataset and participant info, scan details, the waveform of each physiological channel, and each metric with its percentile and position in the group histogram.
@@ -111,6 +111,8 @@ In ds006644, 79 of 80 scans are trigger-verified. sub-18 ses-02 is flagged red: 
 BIDS_ROOT=/path/to/your/dataset BIDSDER_ROOT=/path/to/derivatives npm run dev
 ```
 
+Datasets that keep the raw data in `physprep/` next to `fmriprep/` (e.g. CNeuroMod `shinobi`, `movie10`) can be given by their folder: `BIDS_ROOT=data/shinobi npm run dev` uses `data/shinobi/physprep` and `data/shinobi/fmriprep`.
+
 Requirements:
 
 - Standard BIDS layout: `sub-XX/ses-XX/func/*_physio.tsv.gz` or session-less `sub-XX/func/*_physio.tsv.gz`
@@ -121,7 +123,7 @@ Requirements:
 
 Annotations are saved under `data/annotations/` by default; set `ANNOTATIONS_ROOT` to store them elsewhere.
 
-The quality metrics page does not use `BIDS_ROOT`: run the script with `--bids-root` (see [Dataset quality metrics](#dataset-quality-metrics)), and every dataset with computed metrics appears in the page's Dataset menu.
+The Stats tabs show the same dataset, using the metrics computed for it under `data/quality/<name>/`, where `<name>` is the dataset's folder under `data/` (e.g. `BIDS_ROOT=data/shinobi/physprep` → `shinobi`). For a dataset outside `data/`, compute its metrics with `--bids-root` and the same name the server uses: the folder name of `BIDS_ROOT`, or set `DATASET_NAME`.
 
 ## Contributing
 

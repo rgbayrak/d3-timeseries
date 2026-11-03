@@ -45,7 +45,6 @@ export const TSV_HEADER: string[] = [...SCAN_COLUMNS, ...METRIC_COLUMNS.map((c) 
 export const METRICS_TSV_NAME = 'quality_metrics.tsv';
 export const DATASET_JSON_NAME = 'dataset.json';
 export const WAVEFORMS_DIR = 'waveforms';
-export const INDEX_JSON_NAME = 'index.json';
 
 export interface ScanKeyLike {
   sub: string;
@@ -216,8 +215,4 @@ export interface WaveformFile {
   /** Bucket centre times (s) on the scan-onset axis */
   times: number[];
   channels: { channel: string; min: (number | null)[]; max: (number | null)[] }[];
-}
-
-export interface QualityIndexFile {
-  datasets: string[];
 }
