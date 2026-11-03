@@ -42,13 +42,13 @@ describe('computeSQI: basic statistics', () => {
     expect(Object.keys(r)).toEqual(['b', 'a']);
   });
 
-  it('mean, SD, range and median of a sine', () => {
+  it('mean and SD of a sine', () => {
     expect(m.mean).toBeCloseTo(0, 6);
     expect(m.stdDev).toBeCloseTo(Math.SQRT1_2, 3);
-    // sampled peaks land within half a sample of the true peak
-    expect(m.min).toBeCloseTo(-1, 2);
-    expect(m.max).toBeCloseTo(1, 2);
-    expect(m.median).toBeCloseTo(0, 2);
+  });
+
+  it('does not compute min, max, median or percent non-zero', () => {
+    for (const key of ['min', 'max', 'median', 'percentNonZero']) expect(m).not.toHaveProperty(key);
   });
 
   it('skewness 0 and excess kurtosis -1.5', () => {
@@ -64,11 +64,6 @@ describe('computeSQI: basic statistics', () => {
   it('SNR is mean / SD', () => {
     const shifted = metricsFor({ s: sine(1, { offset: 5 }) }).s;
     expect(shifted.snr).toBeCloseTo(5 / Math.SQRT1_2, 2);
-  });
-
-  it('percentNonZero counts non-zero samples', () => {
-    const halfZero = Array.from({ length: 1000 }, (_, i) => (i % 2 === 0 ? 0 : 1));
-    expect(metricsFor({ s: halfZero }).s.percentNonZero).toBe(50);
   });
 
   it('a flat channel has infinite SNR and undefined shape statistics', () => {

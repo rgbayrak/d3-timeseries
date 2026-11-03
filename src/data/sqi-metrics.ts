@@ -1,14 +1,10 @@
-import { mean, deviation, min, max, median } from 'd3-array';
+import { mean, deviation } from 'd3-array';
 import type { PhysioRaw } from './bids-physio-reader';
 
 export interface ChannelMetrics {
   channelName: string;
   mean: number;
   stdDev: number;
-  min: number;
-  max: number;
-  median: number;
-  percentNonZero: number;
   snr: number;
   kurtosis: number;
   skewness: number;
@@ -148,16 +144,6 @@ function computeChannelMetrics(
 
   const mu = mean(data) ?? 0;
   const sd = deviation(data) ?? 0;
-  const lo = min(data) ?? 0;
-  const hi = max(data) ?? 0;
-  const med = median(data) ?? 0;
-
-  // Percent non-zero
-  let nonZeroCount = 0;
-  for (let i = 0; i < n; i++) {
-    if (data[i] !== 0) nonZeroCount++;
-  }
-  const percentNonZero = n > 0 ? (nonZeroCount / n) * 100 : 0;
 
   // SNR
   const snr = sd === 0 ? Infinity : mu / sd;
@@ -401,10 +387,6 @@ function computeChannelMetrics(
     channelName,
     mean: mu,
     stdDev: sd,
-    min: lo,
-    max: hi,
-    median: med,
-    percentNonZero,
     snr,
     kurtosis,
     skewness,
