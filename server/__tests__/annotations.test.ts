@@ -2,7 +2,14 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, existsSync, readdirSync, mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { readAnnotations, writeAnnotations, validateScanKey } from '../bids-layout';
+import {
+  readAnnotations,
+  writeAnnotations,
+  validateScanKey,
+  validateChannel,
+  isAnnotated,
+  annotationProgress,
+} from '../bids-layout';
 import type { AnnotationsFile } from '../bids-layout';
 
 const payload = (over: Partial<AnnotationsFile> = {}): AnnotationsFile => ({
@@ -24,6 +31,37 @@ beforeEach(() => {
 });
 afterEach(() => {
   rmSync(root, { recursive: true, force: true });
+});
+
+describe('annotation progress', () => {
+  it('counts a scan once a signal quality rating, notes or a time window is saved', () => {
+    expect(isAnnotated(null)).toBe(false);
+    expect(isAnnotated(payload({ annotations: [] }))).toBe(false);
+    expect(isAnnotated(payload({ annotations: [], waveform_quality: null, waveform_comment: '  ' }))).toBe(false);
+    expect(isAnnotated(payload())).toBe(true); // one time window
+    expect(isAnnotated(payload({ annotations: [], waveform_quality: 'good' }))).toBe(true);
+    expect(isAnnotated(payload({ annotations: [], waveform_comment: 'noisy start' }))).toBe(true);
+  });
+
+  it('counts annotated scans for one channel out of all scans', () => {
+    const scans = [
+      { sub: '01', ses: '02', task: 'rest', run: '01' },
+      { sub: '02', ses: '', task: 'rest', run: '' },
+      { sub: '03', ses: '02', task: 'rest', run: '01' },
+    ];
+    writeAnnotations(root, payload()); // sub-01 cardiac: annotated
+    writeAnnotations(root, payload({ sub: '02', ses: '', run: '', annotations: [], waveform_quality: 'bad' }));
+    writeAnnotations(root, payload({ sub: '03', annotations: [] })); // saved but empty
+    writeAnnotations(root, payload({ sub: '03', channel: 'respiratory' })); // other channel
+    expect(annotationProgress(root, scans, 'cardiac')).toEqual({ annotated: 2, total: 3 });
+    expect(annotationProgress(root, scans, 'respiratory')).toEqual({ annotated: 1, total: 3 });
+    expect(annotationProgress(root, [], 'cardiac')).toEqual({ annotated: 0, total: 0 });
+  });
+
+  it('rejects channel names that could escape the annotations folder', () => {
+    expect(validateChannel('cardiac')).toBeNull();
+    expect(validateChannel('../x')).not.toBeNull();
+  });
 });
 
 describe('annotations storage', () => {

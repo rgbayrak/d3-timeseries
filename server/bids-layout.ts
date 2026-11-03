@@ -473,6 +473,10 @@ export interface StoredAnnotation {
 }
 
 export interface AnnotationsFile {
+  /** Whole-waveform rating (good, bad, fixable, unknown); first in the file. Absent in older files */
+  waveform_quality?: 'good' | 'bad' | 'fixable' | 'unknown' | null;
+  /** Whole-waveform quality analysis comment; absent in older files */
+  waveform_comment?: string;
   sub: string;
   ses: string;
   task: string;
@@ -549,6 +553,37 @@ export function readAnnotations(
   } catch {
     return null;
   }
+}
+
+/** Channel name check on its own (same rule as validateScanKey); error message or null */
+export function validateChannel(channel: string): string | null {
+  return CHANNEL_RE.test(channel) ? null : `Invalid channel name: ${JSON.stringify(channel)}`;
+}
+
+/**
+ * A scan's channel counts as annotated once anything about it was saved: a
+ * full-recording signal quality rating, notes, or at least one time window.
+ */
+export function isAnnotated(file: AnnotationsFile | null): boolean {
+  if (!file) return false;
+  return (
+    file.waveform_quality != null ||
+    (typeof file.waveform_comment === 'string' && file.waveform_comment.trim() !== '') ||
+    (Array.isArray(file.annotations) && file.annotations.length > 0)
+  );
+}
+
+/** How many of the given scans are annotated for one channel ("24/80 annotated") */
+export function annotationProgress(
+  root: string,
+  scans: { sub: string; ses: string; task: string; run: string }[],
+  channel: string,
+): { annotated: number; total: number } {
+  let annotated = 0;
+  for (const s of scans) {
+    if (isAnnotated(readAnnotations(root, s.sub, s.ses, s.task, s.run, channel))) annotated++;
+  }
+  return { annotated, total: scans.length };
 }
 
 export function writeAnnotations(root: string, payload: AnnotationsFile): void {

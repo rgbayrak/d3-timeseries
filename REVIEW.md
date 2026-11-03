@@ -2,8 +2,7 @@
 
 What each metric computes, where it comes from, and open points to check.
 Source of truth: `computeChannelMetrics()` in `src/data/sqi-metrics.ts`. The
-viewer's **Compute SQI** button and the dataset-wide script
-(`scripts/compute-quality-metrics.ts`) both call it.
+dataset-wide script (`scripts/compute-quality-metrics.ts`) calls it.
 
 ## Conventions
 

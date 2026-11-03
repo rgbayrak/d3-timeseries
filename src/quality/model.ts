@@ -10,11 +10,11 @@ export interface MetricDef {
   label: string;
   description?: string;
   decimals: number;
-  /** Group from the viewer's SQI table (Basic, Distribution, PaPaGei, PhysioQC) */
+  /** Group from SQI_COLUMNS (Basic, Distribution, PaPaGei, PhysioQC) */
   group: string;
 }
 
-/** Metric labels, descriptions and groups come from the viewer's SQI table, so both pages use the same names */
+/** Metric labels, descriptions and groups come from SQI_COLUMNS (src/viewer/sqi-table.ts), the one list of metric names */
 export const METRIC_DEFS: MetricDef[] = METRIC_COLUMNS.map((c) => {
   const col = SQI_COLUMNS.find((s) => s.key === c.key);
   return {
@@ -144,17 +144,35 @@ export function defaultMetricPair(rows: QualityRow[], visible?: VisibleMetrics):
   return [x, y];
 }
 
-export type ColorBy = 'task' | 'ses' | 'timingStatus' | 'sidecarAssessment';
+/** 'none': one colour for every point (the dataset has nothing to colour by) */
+export type ColorBy = 'task' | 'ses' | 'timingStatus' | 'sidecarAssessment' | 'none';
 
-export const COLOR_BY_OPTIONS: { key: ColorBy; label: string }[] = [
+/** Every possible Colour by choice; colorByOptions() keeps the ones a dataset has */
+export const COLOR_BY_OPTIONS: { key: Exclude<ColorBy, 'none'>; label: string }[] = [
   { key: 'task', label: 'Task' },
   { key: 'ses', label: 'Session' },
   { key: 'timingStatus', label: 'Timing check' },
   { key: 'sidecarAssessment', label: 'Sidecar pass/fail' },
 ];
 
+export function colorByLabel(by: ColorBy): string {
+  return by === 'none' ? 'None' : (COLOR_BY_OPTIONS.find((o) => o.key === by)?.label ?? by);
+}
+
 export function colorKey(row: QualityRow, by: ColorBy): string {
+  if (by === 'none') return 'All recordings';
   return row[by] || '(none)';
+}
+
+/**
+ * Colour by choices that mean something for these rows: at least one row has
+ * a value, and there are at least two different groups. A dataset without
+ * sessions has no Session choice; one with a single task has no Task choice.
+ */
+export function colorByOptions(rows: QualityRow[]): { key: Exclude<ColorBy, 'none'>; label: string }[] {
+  return COLOR_BY_OPTIONS.filter(
+    (o) => rows.some((r) => r[o.key]) && new Set(rows.map((r) => colorKey(r, o.key))).size >= 2,
+  );
 }
 
 /** Sorted distinct colour groups */
@@ -435,6 +453,15 @@ export function datasetSummaryText(s: SummaryInput, rows: QualityRow[]): string 
   }
 
   return sentences.join(' ');
+}
+
+/**
+ * Bold the key facts in already-escaped summary text: counts with their unit
+ * ("80 scans", "40 subjects", "3 tasks") and sampling rates ("496 Hz"). The
+ * text itself stays the same (the PDF uses it as plain text).
+ */
+export function boldFacts(escapedText: string): string {
+  return escapedText.replace(/\b\d+(?:\.\d+)?\s(?:scans?|subjects?|tasks?|Hz)\b/g, (m) => `<strong>${m}</strong>`);
 }
 
 const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };

@@ -1,8 +1,82 @@
-/* Folder tabs shared by index.html (Explore and Annotate) and quality.html
-   (Stats Group, Stats Individual). Tabs are links or buttons with class
+/* Page shell shared by index.html (Explore and Annotate) and quality.html
+   (Stats Group, Stats Individual): folder tabs, the dataset header under them,
+   and the one button style (.btn). Tabs are links or buttons with class
    "folder-tab"; the current one also has class "active". A page can set
    --tab-accent (stripe on the open tab; any background, e.g. a gradient) and
    --tab-active-ink (its label colour) to take on its own theme. */
+
+/* ── Text: one font, size scale and set of colours on every tab ──
+   Sizes: 16 dataset name · 14 headings, controls · 13 body text, filename ·
+   12 notes, section labels, badges, tables. Pages use these tokens for text
+   and keep their own accent colours only for tabs, charts and highlights. */
+:root {
+  --text: #222;   /* main text, values, headings */
+  --text-2: #5a636b; /* labels, section labels, secondary text */
+  --text-3: #888; /* notes, hints, empty states */
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+body {
+  font-family: sans-serif;
+  color: var(--text);
+  background: #fff;
+  /* No scroll anchoring: when charts are redrawn the browser would shift the
+     page to follow a chart it picked as anchor, which looks like a jump */
+  overflow-anchor: none;
+}
+
+h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Notes and hints under headings */
+.muted {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* Small uppercase label for a section or sidebar block, in the tabs' lettering */
+.section-label {
+  font: 600 12px/1.2 sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+/* Form controls */
+select,
+input[type='text'],
+textarea {
+  font: 14px sans-serif;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+select,
+input[type='text'] {
+  padding: 2px 6px;
+}
+
+/* Chart axes */
+.axis text {
+  fill: var(--text-2);
+}
+
+.axis-label {
+  font-size: 13px;
+  font-weight: 600;
+  fill: var(--text);
+}
 
 .folder-tabs {
   display: flex;
@@ -62,6 +136,114 @@
 }
 
 .folder-tab:focus-visible {
+  outline: 2px solid #2d6da3;
+  outline-offset: 1px;
+}
+
+/* Dataset header: name + description from dataset_description.json, directly
+   under the tabs on every tab. Fixed height and one line each (full text on
+   hover), so switching tabs or loading never moves what is below it. */
+.dataset-header {
+  box-sizing: border-box;
+  max-width: 960px;
+  height: 52px;
+  margin: 0 auto 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ddd;
+  font: 13px/18px sans-serif;
+  color: var(--text-2);
+  overflow: hidden;
+}
+
+.dataset-header .dataset-name {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.dataset-header .dataset-name,
+.dataset-header .dataset-meta {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dataset-header .dataset-meta {
+  margin-top: 2px;
+}
+
+.dataset-header a {
+  color: #2d6da3;
+}
+
+/* "Now viewing: <file>" line above the graphs, same on every tab that shows one
+   scan; hidden until the filename is filled in */
+.now-viewing {
+  max-width: 960px;
+  margin: 0 auto 8px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.now-viewing:has(.now-viewing-file:empty) {
+  display: none;
+}
+
+.now-viewing-label {
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* "(24/80 ch:cardiac signals are annotated)" after the file name in Explore and Annotate */
+.annotation-progress {
+  margin-left: 6px;
+  color: var(--text);
+  white-space: nowrap;
+  cursor: help;
+}
+
+/* Any file name shown on a page (scan, confounds file) */
+.now-viewing-file {
+  font: 13px var(--mono);
+  color: var(--text);
+}
+
+/* Buttons: one style on every page. Add "active" for a toggle that is on. */
+.btn {
+  font: 600 13px/1.3 sans-serif;
+  padding: 3px 14px;
+  cursor: pointer;
+  border: 1px solid #8b97a8;
+  border-radius: 14px;
+  background: #eef1f5;
+  color: #2b3a4a;
+  white-space: nowrap;
+  list-style: none; /* for <summary class="btn"> */
+  user-select: none;
+}
+
+.btn::-webkit-details-marker {
+  display: none;
+}
+
+.btn:hover:not(:disabled) {
+  background: #e1e6ed;
+}
+
+.btn.active,
+.btn.active:hover:not(:disabled) {
+  background: #3d4f63;
+  border-color: #3d4f63;
+  color: #fff;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.btn:focus-visible {
   outline: 2px solid #2d6da3;
   outline-offset: 1px;
 }

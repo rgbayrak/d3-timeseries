@@ -14,7 +14,7 @@ export function escapeHtml(str: string): string {
 }
 
 export const EMPTY_ANNOTATIONS_HTML =
-  '<div class="annotation-empty">No annotations yet — enable Annotate mode and drag on the focus chart.</div>';
+  '<div class="annotation-empty">No time windows yet. Turn Annotate on and drag on the top chart.</div>';
 
 export function annotationListHtml(annotations: Annotation[]): string {
   if (annotations.length === 0) return EMPTY_ANNOTATIONS_HTML;

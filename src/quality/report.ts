@@ -12,7 +12,7 @@ import type { GroupSelection } from './group-tab';
 import type { VisibleMetrics } from './model';
 import {
   ALL_METRICS,
-  COLOR_BY_OPTIONS,
+  colorByLabel,
   availableMetrics,
   categoryLabel,
   colorGroups,
@@ -387,9 +387,9 @@ export async function buildQualityReport(opts: ReportOptions): Promise<Blob> {
       );
     }
     L.gap(6);
-    const colorLabel = COLOR_BY_OPTIONS.find((o) => o.key === selection.colorBy)?.label ?? selection.colorBy;
+    const colour = selection.colorBy === 'none' ? 'one colour' : `colour = ${colorByLabel(selection.colorBy).toLowerCase()}`;
     await L.text(
-      `Contents: one section per channel with a scatter plot (colour = ${colorLabel.toLowerCase()}) and the ` +
+      `Contents: one section per channel with a scatter plot (${colour}) and the ` +
         `distribution of ${visible.size === ALL_METRICS.length ? 'every metric' : `the ${visible.size} selected metrics`}` +
         (includeScans ? ', then one page per scan with its waveforms and metrics (percentile among all recordings of the same channel).' : '.'),
       9,

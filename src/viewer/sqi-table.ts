@@ -1,11 +1,15 @@
-import type { SQIResults, ChannelMetrics } from '@/data/sqi-metrics';
+import type { ChannelMetrics } from '@/data/sqi-metrics';
+
+// Labels, decimals, descriptions and groups for each per-channel quality metric.
+// The Stats tabs (src/quality/model.ts) and their PDF take metric names from
+// here. Explore and Annotate no longer shows a metrics table.
 
 export interface ColDef {
   label: string;
   key: keyof ChannelMetrics;
   decimals: number;
   description?: string;
-  /** 'always' columns can't be hidden; the others toggle per group or individually */
+  /** 'always' is the channel name; the others are the metric groups below */
   group: string;
 }
 
@@ -27,133 +31,9 @@ export const SQI_COLUMNS: ColDef[] = [
 
 export const SQI_GROUPS = ['Basic', 'Distribution', 'PaPaGei', 'PhysioQC'];
 
-/** Channel plus the Basic group are shown by default */
-export function defaultVisibleColumns(): Set<string> {
-  return new Set(SQI_COLUMNS.filter((c) => c.group === 'always' || c.group === 'Basic').map((c) => c.key));
-}
-
 export function formatMetricValue(val: number, decimals: number): string {
   if (val === Infinity) return 'Inf';
   if (val === -Infinity) return '-Inf';
   if (Number.isNaN(val)) return 'N/A';
   return val.toFixed(decimals);
-}
-
-function groupKeys(group: string): string[] {
-  return SQI_COLUMNS.filter((c) => c.group === group).map((c) => c.key);
-}
-
-/** Table HTML for the visible columns; one row per channel */
-export function sqiTableHtml(results: SQIResults, visible: Set<string>): string {
-  const active = SQI_COLUMNS.filter((c) => c.group === 'always' || visible.has(c.key));
-
-  let html = '<table><thead><tr>';
-  for (const c of active) {
-    const tip = c.description ? ` data-tip="${c.description}"` : '';
-    html += `<th${tip}>${c.label}</th>`;
-  }
-  html += '</tr></thead><tbody>';
-
-  for (const m of results.metrics) {
-    html += '<tr>';
-    for (const c of active) {
-      const val = m[c.key];
-      html += typeof val === 'string' ? `<td>${val}</td>` : `<td>${formatMetricValue(val, c.decimals)}</td>`;
-    }
-    html += '</tr>';
-  }
-
-  return html + '</tbody></table>';
-}
-
-export interface SqiTableElements {
-  section: HTMLElement;
-  container: HTMLElement;
-  controls: HTMLElement;
-}
-
-export interface SqiTable {
-  /** Render results and reveal the section */
-  show: (results: SQIResults) => void;
-  hide: () => void;
-  /** Hide and drop the rendered table (new scan loaded) */
-  clear: () => void;
-}
-
-/** SQI table with group buttons and per-column checkboxes; column choices persist across scans */
-export function createSqiTable(els: SqiTableElements): SqiTable {
-  const visible = defaultVisibleColumns();
-  let lastResults: SQIResults | null = null;
-
-  function renderBody() {
-    if (lastResults) els.container.innerHTML = sqiTableHtml(lastResults, visible);
-  }
-
-  function syncCheckboxes() {
-    els.controls.querySelectorAll<HTMLInputElement>('.sqi-checkboxes input').forEach((cb) => {
-      cb.checked = visible.has(cb.dataset.col!);
-    });
-  }
-
-  function syncGroupButtons() {
-    els.controls.querySelectorAll<HTMLButtonElement>('.sqi-groups button').forEach((btn) => {
-      btn.classList.toggle('active', groupKeys(btn.dataset.group!).every((k) => visible.has(k)));
-    });
-  }
-
-  function buildControls() {
-    let html = '<div class="sqi-groups">';
-    for (const g of SQI_GROUPS) {
-      const active = groupKeys(g).every((k) => visible.has(k)) ? 'active' : '';
-      html += `<button type="button" class="${active}" data-group="${g}">${g}</button>`;
-    }
-    html += '</div><div class="sqi-checkboxes">';
-    for (const c of SQI_COLUMNS) {
-      if (c.group === 'always') continue;
-      const checked = visible.has(c.key) ? ' checked' : '';
-      html += `<label><input type="checkbox" data-col="${c.key}"${checked}>${c.label}</label>`;
-    }
-    html += '</div>';
-    els.controls.innerHTML = html;
-
-    // A group button shows the whole group, or hides it if it is already fully shown
-    els.controls.querySelectorAll<HTMLButtonElement>('.sqi-groups button').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const keys = groupKeys(btn.dataset.group!);
-        const allVisible = keys.every((k) => visible.has(k));
-        for (const k of keys) {
-          if (allVisible) visible.delete(k);
-          else visible.add(k);
-        }
-        btn.classList.toggle('active', !allVisible);
-        syncCheckboxes();
-        renderBody();
-      });
-    });
-
-    els.controls.querySelectorAll<HTMLInputElement>('.sqi-checkboxes input').forEach((cb) => {
-      cb.addEventListener('change', () => {
-        if (cb.checked) visible.add(cb.dataset.col!);
-        else visible.delete(cb.dataset.col!);
-        syncGroupButtons();
-        renderBody();
-      });
-    });
-  }
-
-  return {
-    show(results) {
-      lastResults = results;
-      buildControls();
-      renderBody();
-      els.section.style.display = '';
-    },
-    hide() {
-      els.section.style.display = 'none';
-    },
-    clear() {
-      els.section.style.display = 'none';
-      els.container.innerHTML = '';
-    },
-  };
 }

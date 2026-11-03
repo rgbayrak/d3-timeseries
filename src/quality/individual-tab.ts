@@ -1,6 +1,6 @@
 import type { ChartInstance } from '@/core';
-import { renderDatasetInfo, TIMING_LABELS } from '@/viewer/info';
-import type { DatasetInfo, TimingStatus } from '@/data/bids-physio-reader';
+import { TIMING_LABELS } from '@/viewer/info';
+import type { TimingStatus } from '@/data/bids-physio-reader';
 import { sameScanKey, scanId } from './metrics-tsv';
 import type { MetricKey, QualityRow, ScanKeyLike, ParticipantsTable } from './metrics-tsv';
 import { fetchWaveforms } from './data';
@@ -22,21 +22,24 @@ import type { VisibleMetrics } from './model';
 import { percentileRank } from './stats';
 
 export interface IndividualTabElements {
-  scanSelect: HTMLSelectElement;
   prevBtn: HTMLButtonElement;
   nextBtn: HTMLButtonElement;
   filename: HTMLElement;
-  datasetInfo: HTMLElement;
   participant: HTMLElement;
   scanDetails: HTMLElement;
   waveforms: HTMLElement;
-  metricsTable: HTMLElement;
-  histograms: HTMLElement;
+  /** One section per channel: its metrics table, then its histograms */
+  metrics: HTMLElement;
 }
 
 export interface IndividualTab {
   /** Show one scan of a loaded dataset (first scan when scan is null); returns the scan shown */
   show: (dataset: string, data: LoadedDataset, scan: ScanKeyLike | null) => ScanKeyLike | null;
+  /**
+   * Metrics picker changed: redraw only the metric tables and histograms of the
+   * scan shown, keeping the waveforms and the scroll position
+   */
+  refreshMetrics: () => void;
 }
 
 function participantHtml(table: ParticipantsTable | null, sub: string): string {
@@ -80,28 +83,23 @@ function scanDetailsHtml(rows: QualityRow[]): string {
   return html + '</div>';
 }
 
-/** Channels × metrics, each value with its percentile within the same channel across the dataset */
-function metricsTableHtml(scanRows: QualityRow[], all: QualityRow[], visible: VisibleMetrics): string {
-  const keys = availableMetrics(scanRows, visible);
-  if (keys.length === 0) return '<div class="muted">No metrics to show for this scan. Check the Metrics menu above.</div>';
-  let html = '<table class="metrics-table"><thead><tr><th>Channel</th>';
+/**
+ * One channel's metrics for this scan, each value with its percentile within the
+ * same channel across the dataset. Only metrics this scan has a value for, so
+ * there are no empty cells from metrics that belong to another channel.
+ */
+function channelTableHtml(r: QualityRow, group: QualityRow[], keys: MetricKey[]): string {
+  let head = '';
+  let body = '';
   for (const k of keys) {
     const d = metricDef(k);
-    html += `<th${d.description ? ` title="${esc(d.description)}"` : ''}>${esc(d.label)}</th>`;
+    head += `<th${d.description ? ` title="${esc(d.description)}"` : ''}>${esc(d.label)}</th>`;
+    const v = r.metrics[k];
+    const p = percentileRank(group.map((g) => g.metrics[k]), v);
+    const pct = Number.isFinite(p) ? `<span class="pct">${ordinal(p)} pct</span>` : '';
+    body += `<td>${esc(formatMetric(v, k))}${pct}</td>`;
   }
-  html += '</tr></thead><tbody>';
-  for (const r of scanRows) {
-    const group = rowsForChannel(all, r.channel);
-    html += `<tr><td>${esc(r.channel)}</td>`;
-    for (const k of keys) {
-      const v = r.metrics[k];
-      const p = percentileRank(group.map((g) => g.metrics[k]), v);
-      const pct = Number.isFinite(p) ? `<span class="pct">${ordinal(p)} pct</span>` : '';
-      html += `<td>${esc(formatMetric(v, k))}${pct}</td>`;
-    }
-    html += '</tr>';
-  }
-  return html + '</tbody></table>';
+  return `<div class="metrics-wrap"><table class="metrics-table"><thead><tr>${head}</tr></thead><tbody><tr>${body}</tr></tbody></table></div>`;
 }
 
 export function createIndividualTab(
@@ -110,12 +108,16 @@ export function createIndividualTab(
   /** Metrics currently chosen in the Metrics picker */
   getVisible: () => VisibleMetrics,
 ): IndividualTab {
+  /** Waveform charts (redrawn only when the scan changes) */
   let charts: ChartInstance[] = [];
+  /** Histograms (also redrawn when the visible metrics change) */
+  let histCharts: ChartInstance[] = [];
   let scans: ScanKeyLike[] = [];
   let current: ScanKeyLike | null = null;
+  /** What the metrics part was last drawn from, for refreshMetrics */
+  let shown: { scanRows: QualityRow[]; all: QualityRow[]; units?: Record<string, string> } | null = null;
   /** Ignores waveform responses for a scan the user has already left */
   let requestId = 0;
-
 
   function step(delta: number) {
     if (!current) return;
@@ -124,27 +126,29 @@ export function createIndividualTab(
     if (next) onSelectScan(next);
   }
 
-  els.scanSelect.addEventListener('change', () => {
-    const s = scans[Number(els.scanSelect.value)];
-    if (s) onSelectScan(s);
-  });
   els.prevBtn.addEventListener('click', () => step(-1));
   els.nextBtn.addEventListener('click', () => step(1));
 
-  function histogramsFor(scanRows: QualityRow[], all: QualityRow[], units?: Record<string, string>) {
-    els.histograms.innerHTML = '';
+  /** Per channel: its table for this scan, then where the scan sits in the group's histograms */
+  function metricsFor(scanRows: QualityRow[], all: QualityRow[], units?: Record<string, string>) {
+    shown = { scanRows, all, units };
+    histCharts.forEach((c) => c.destroy());
+    histCharts = [];
+    els.metrics.innerHTML = '';
     for (const r of scanRows) {
       const group = rowsForChannel(all, r.channel);
+      const tableKeys = availableMetrics([r], getVisible());
       const keys = availableMetrics(group, getVisible());
       if (keys.length === 0) continue;
       const section = document.createElement('section');
       section.innerHTML =
-        `<h4>Where this scan's ${esc(r.channel)} sits in the group</h4>` +
+        `<h4>${esc(r.channel)}</h4>` +
+        (tableKeys.length ? channelTableHtml(r, group, tableKeys) : '') +
         `<div class="muted">Solid dark line: this scan. Dashed grey line: mean of all ${group.length} ${esc(r.channel)} recordings.</div>`;
       const grid = document.createElement('div');
       grid.className = 'hist-grid';
       section.appendChild(grid);
-      els.histograms.appendChild(section);
+      els.metrics.appendChild(section);
 
       for (const k of keys as MetricKey[]) {
         // No title: the x-axis label names the metric; its description shows on hover
@@ -160,8 +164,11 @@ export function createIndividualTab(
           color: metricColor(k),
           xLabel: metricAxisLabel(k, r.channel, units),
         });
-        if (chart) charts.push(chart);
+        if (chart) histCharts.push(chart);
       }
+    }
+    if (!els.metrics.hasChildNodes()) {
+      els.metrics.innerHTML = '<div class="muted">No metrics to show for this scan. Check Metrics shown in the sidebar.</div>';
     }
   }
 
@@ -186,6 +193,8 @@ export function createIndividualTab(
         max: ch.max,
         units: units?.[ch.channel],
         timeLabel: i === wf.channels.length - 1,
+        // Fill the graphs column (3/4 of the page beside the sidebar)
+        width: el.clientWidth || undefined,
       });
       if (chart) charts.push(chart);
     });
@@ -196,30 +205,29 @@ export function createIndividualTab(
   }
 
   return {
+    refreshMetrics() {
+      // Synchronous redraw: no gap is painted, so the scroll position holds
+      if (shown) metricsFor(shown.scanRows, shown.all, shown.units);
+    },
+
     show(dataset, data, scan) {
       const id = ++requestId;
       charts.forEach((c) => c.destroy());
       charts = [];
+      shown = null;
 
       scans = uniqueScans(data.rows);
       current = (scan && scans.find((s) => sameScanKey(s, scan))) ?? scans[0] ?? null;
-      els.scanSelect.innerHTML = scans
-        .map((s, i) => `<option value="${i}"${current && sameScanKey(s, current) ? ' selected' : ''}>${esc(scanId(s))}</option>`)
-        .join('');
       const i = current ? scans.findIndex((s) => sameScanKey(s, current!)) : -1;
       els.prevBtn.disabled = i <= 0;
       els.nextBtn.disabled = i === -1 || i >= scans.length - 1;
-
-      renderDatasetInfo(els.datasetInfo, data.summary.info as DatasetInfo);
-      if (!els.datasetInfo.hasChildNodes()) els.datasetInfo.textContent = data.summary.dataset;
 
       if (!current) {
         els.filename.textContent = '';
         els.participant.innerHTML = '';
         els.scanDetails.innerHTML = '';
         els.waveforms.innerHTML = '';
-        els.metricsTable.innerHTML = '<div class="muted">This dataset has no scans with metrics.</div>';
-        els.histograms.innerHTML = '';
+        els.metrics.innerHTML = '<div class="muted">This dataset has no scans with metrics.</div>';
         return null;
       }
       const notice =
@@ -231,8 +239,7 @@ export function createIndividualTab(
       els.filename.textContent = scanRows[0].filename;
       els.participant.innerHTML = participantHtml(data.summary.participants, current.sub);
       els.scanDetails.innerHTML = notice + scanDetailsHtml(scanRows);
-      els.metricsTable.innerHTML = metricsTableHtml(scanRows, data.rows, getVisible());
-      histogramsFor(scanRows, data.rows, data.summary.channelUnits);
+      metricsFor(scanRows, data.rows, data.summary.channelUnits);
       void waveformsFor(dataset, current, id, data.summary.channelUnits);
       return current;
     },

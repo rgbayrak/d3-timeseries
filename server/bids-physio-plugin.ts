@@ -12,6 +12,8 @@ import {
   readDatasetInfo,
   resolveBidsRoots,
   validateScanKey,
+  validateChannel,
+  annotationProgress,
 } from './bids-layout';
 import type { AnnotationsFile, ScanKey } from './bids-layout';
 import type { ServerResponse } from 'http';
@@ -174,6 +176,21 @@ export function bidsPhysioPlugin(): Plugin {
 
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify(result));
+          return;
+        }
+
+        // How many scans are annotated for one channel, e.g. { annotated: 24, total: 80 }
+        if (req.url?.startsWith('/api/bids/annotation-progress')) {
+          const url = new URL(req.url, 'http://localhost');
+          const channel = url.searchParams.get('channel');
+          const error = channel ? validateChannel(channel) : 'Missing channel parameter';
+          if (error || !channel) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error }));
+            return;
+          }
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(annotationProgress(ANNOTATIONS_ROOT, scans, channel)));
           return;
         }
 

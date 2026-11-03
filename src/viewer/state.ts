@@ -1,6 +1,6 @@
 import type { SubjectInfo, ScanEntry, PhysioRaw, ConfoundsRaw } from '@/data/bids-physio-reader';
-import type { SQIResults } from '@/data/sqi-metrics';
-import type { Annotation } from './annotations';
+import type { Annotation, WaveformAssessment } from './annotations';
+import { NO_ASSESSMENT } from './annotations';
 
 /** Channel, confound and stack restored from the last session, consumed by the first scan load */
 export interface RestoredSelection {
@@ -21,12 +21,13 @@ export interface ViewerState {
   current: ScanEntry | null;
   raw: PhysioRaw | null;
   confounds: ConfoundsRaw | null;
-  sqi: SQIResults | null;
   /** Extra channels drawn as compact figures below the focus chart, in column order */
   stackedChannels: string[];
   annotateMode: boolean;
   /** Annotations for the current scan and main channel */
   annotations: Annotation[];
+  /** Rating and comment for the whole waveform of the current scan and main channel */
+  waveform: WaveformAssessment;
   restoredSelection: RestoredSelection | null;
 }
 
@@ -37,10 +38,10 @@ export function createState(): ViewerState {
     current: null,
     raw: null,
     confounds: null,
-    sqi: null,
     stackedChannels: [],
     annotateMode: false,
     annotations: [],
+    waveform: { ...NO_ASSESSMENT },
     restoredSelection: null,
   };
 }

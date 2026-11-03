@@ -13,20 +13,22 @@ export interface ViewerElements {
   searchInput: HTMLInputElement;
   datasetInfo: HTMLElement;
   filename: HTMLElement;
+  /** "(24/80 ch:cardiac signals are annotated)" next to the file name */
+  annotationProgress: HTMLElement;
   qualityBadges: HTMLElement;
   loading: HTMLElement;
   confoundsSection: HTMLElement;
   confoundsLabel: HTMLElement;
-  computeSqiBtn: HTMLButtonElement;
-  sqiSection: HTMLElement;
-  hideSqiBtn: HTMLButtonElement;
-  sqiTableContainer: HTMLElement;
-  sqiColControls: HTMLElement;
   annotateModeBtn: HTMLButtonElement;
   annotationList: HTMLElement;
+  /** Holds the Good / Bad / Fixable / Unknown buttons (data-quality) */
+  waveformQuality: HTMLElement;
+  waveformComment: HTMLTextAreaElement;
   stackRow: HTMLElement;
   stackChannels: HTMLElement;
   stackSection: HTMLElement;
+  /** Wraps the stack and confounds sections under the "Auxiliary" label */
+  auxiliarySection: HTMLElement;
 }
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -51,19 +53,18 @@ export function getElements(): ViewerElements {
     searchInput: byId('search-input'),
     datasetInfo: byId('dataset-info'),
     filename: byId('filename'),
+    annotationProgress: byId('annotation-progress'),
     qualityBadges: byId('quality-badges'),
     loading: byId('loading'),
     confoundsSection: byId('confounds-section'),
     confoundsLabel: byId('confounds-label'),
-    computeSqiBtn: byId('compute-sqi-btn'),
-    sqiSection: byId('sqi-section'),
-    hideSqiBtn: byId('hide-sqi-btn'),
-    sqiTableContainer: byId('sqi-table-container'),
-    sqiColControls: byId('sqi-col-controls'),
     annotateModeBtn: byId('annotate-mode-btn'),
     annotationList: byId('annotation-list'),
+    waveformQuality: byId('waveform-quality'),
+    waveformComment: byId('waveform-comment'),
     stackRow: byId('stack-row'),
     stackChannels: byId('stack-channels'),
     stackSection: byId('stack-section'),
+    auxiliarySection: byId('auxiliary-section'),
   };
 }

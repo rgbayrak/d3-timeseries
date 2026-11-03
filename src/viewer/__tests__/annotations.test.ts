@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { createAnnotation, toAnnotationsFile, fromAnnotationsFile } from '../annotations';
+import { createAnnotation, toAnnotationsFile, fromAnnotationsFile, waveformAssessmentFromFile } from '../annotations';
+import type { AnnotationsFile } from '@/data/bids-physio-reader';
 import { escapeHtml, annotationListHtml, EMPTY_ANNOTATIONS_HTML } from '../annotation-panel';
 
 const scan = { sub: '01', ses: '02', task: 'rest', run: '01' };
@@ -51,6 +52,30 @@ describe('stored annotation format', () => {
       expect(a.start).toBeCloseTo(annotations[i].start, 12);
       expect(a.end).toBeCloseTo(annotations[i].end, 12);
     });
+  });
+});
+
+describe('whole-waveform rating and comment', () => {
+  it('are stored first in the file, above the scan and the time windows', () => {
+    const file = toAnnotationsFile([], scan, 'cardiac', 100, { quality: 'fixable', comment: 'drift after 300 s' });
+    expect(Object.keys(file).slice(0, 2)).toEqual(['waveform_quality', 'waveform_comment']);
+    expect(JSON.stringify(file).startsWith('{"waveform_quality":"fixable","waveform_comment":"drift after 300 s"')).toBe(true);
+  });
+
+  it('round-trip through the stored format', () => {
+    const file = toAnnotationsFile([], scan, 'cardiac', 100, { quality: 'bad', comment: 'no signal' });
+    expect(waveformAssessmentFromFile(file)).toEqual({ quality: 'bad', comment: 'no signal' });
+  });
+
+  it('default to no rating and no comment', () => {
+    expect(toAnnotationsFile([], scan, 'cardiac', 100)).toMatchObject({ waveform_quality: null, waveform_comment: '' });
+  });
+
+  it('read files saved before they existed, and ignore unknown ratings', () => {
+    const old = { ...scan, channel: 'cardiac', sampling_rate: 100, annotations: [] } as AnnotationsFile;
+    expect(waveformAssessmentFromFile(old)).toEqual({ quality: null, comment: '' });
+    const odd = { ...old, waveform_quality: 'great' } as unknown as AnnotationsFile;
+    expect(waveformAssessmentFromFile(odd).quality).toBeNull();
   });
 });
 

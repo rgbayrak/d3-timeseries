@@ -4,11 +4,14 @@ import { shareScanWithViewer, viewerScan } from './linked-scan';
 import { parseRoute, routeHash } from './route';
 import type { Route } from './route';
 import type { ScanKeyLike } from './metrics-tsv';
+import { sameScanKey } from './metrics-tsv';
 import { createGroupTab } from './group-tab';
 import { createIndividualTab } from './individual-tab';
 import { buildQualityReport } from './report';
 import { createMetricPicker } from './metric-picker';
 import { esc, parseVisibleMetrics, serializeVisibleMetrics } from './model';
+import { fetchDatasetInfo } from '@/data/bids-physio-reader';
+import { renderDatasetInfo } from '@/viewer/info';
 import type { VisibleMetrics } from './model';
 
 // Entry for quality.html: owns the page elements, the hash route and the
@@ -25,9 +28,15 @@ const els = {
   tabSubject: byId<HTMLButtonElement>('tab-subject'),
   pdfBtn: byId<HTMLButtonElement>('pdf-btn'),
   pdfScans: byId<HTMLInputElement>('pdf-scans'),
+  datasetInfo: byId<HTMLElement>('dataset-info'),
   status: byId<HTMLElement>('status'),
   groupSection: byId<HTMLElement>('group-tab'),
   subjectSection: byId<HTMLElement>('subject-tab'),
+  /** Sidebar blocks for Stats Individual only: participant and recording details */
+  /** Sidebar block for Stats Group only */
+  sideOverview: byId<HTMLElement>('side-overview'),
+  sideSubject: byId<HTMLElement>('side-subject'),
+  sideScan: byId<HTMLElement>('side-scan'),
 };
 
 // Metrics picker: which metrics the Stats tabs and the PDF show; remembered in this browser only
@@ -49,15 +58,19 @@ function saveVisibleMetrics(visible: VisibleMetrics) {
   }
 }
 
-const metricPicker = createMetricPicker(byId<HTMLDetailsElement>('metric-picker'), readVisibleMetrics(), (visible) => {
+const metricPicker = createMetricPicker(byId<HTMLElement>('metric-picker'), readVisibleMetrics(), (visible) => {
   saveVisibleMetrics(visible);
+  // Keep the page exactly where it is: the redraw changes the graphs' height,
+  // and the browser would otherwise shift or clamp the scroll position
+  const y = window.scrollY;
   groupTab.setVisibleMetrics(visible);
-  if (route.tab === 'subject') applyRoute();
+  // Only the metric tables and histograms change: no full redraw
+  if (route.tab === 'subject') individualTab.refreshMetrics();
+  window.scrollTo(0, y);
 });
 
 const groupTab = createGroupTab(
   {
-    datasetInfo: byId('group-dataset-info'),
     summary: byId('group-summary'),
     channelSelect: byId('channel-select'),
     xSelect: byId('x-select'),
@@ -75,16 +88,13 @@ const groupTab = createGroupTab(
 
 const individualTab = createIndividualTab(
   {
-    scanSelect: byId('scan-select'),
     prevBtn: byId('scan-prev'),
     nextBtn: byId('scan-next'),
     filename: byId('subject-filename'),
-    datasetInfo: byId('subject-dataset-info'),
     participant: byId('subject-participant'),
     scanDetails: byId('subject-scan'),
     waveforms: byId('subject-waveforms'),
-    metricsTable: byId('subject-metrics-table'),
-    histograms: byId('subject-histograms'),
+    metrics: byId('subject-metrics'),
   },
   openScan,
   () => metricPicker.visible(),
@@ -109,6 +119,9 @@ function setStatus(html: string) {
 function showTab(tab: Route['tab']) {
   els.groupSection.style.display = tab === 'group' ? '' : 'none';
   els.subjectSection.style.display = tab === 'subject' ? '' : 'none';
+  els.sideOverview.style.display = tab === 'group' ? '' : 'none';
+  els.sideSubject.style.display = tab === 'subject' ? '' : 'none';
+  els.sideScan.style.display = tab === 'subject' ? '' : 'none';
   els.tabGroup.classList.toggle('active', tab === 'group');
   els.tabSubject.classList.toggle('active', tab === 'subject');
 }
@@ -129,9 +142,15 @@ function applyRoute(): void {
     const shown = individualTab.show(served.id, data, wanted);
     // ...and make Explore and Annotate open the scan shown here
     if (shown) shareScanWithViewer(served.name, shown);
-    window.scrollTo(0, 0);
+    // Back to the top only when a different scan opens (Prev/Next, a scatter double-click)
+    const changed = !shown || !lastIndividualScan || !sameScanKey(shown, lastIndividualScan);
+    if (changed) window.scrollTo(0, 0);
+    lastIndividualScan = shown;
   }
 }
+
+/** Scan last drawn in Stats Individual, to tell a new scan from a redraw of the same one */
+let lastIndividualScan: ScanKeyLike | null = null;
 
 els.tabGroup.addEventListener('click', () => {
   location.hash = routeHash({ tab: 'group' });
@@ -185,7 +204,14 @@ els.pdfBtn.addEventListener('click', async () => {
 
 async function init() {
   els.pdfBtn.disabled = true;
-  served = await fetchServedDataset().catch(() => null);
+  const [servedDataset, datasetInfo] = await Promise.all([
+    fetchServedDataset().catch(() => null),
+    fetchDatasetInfo().catch(() => null),
+  ]);
+  served = servedDataset;
+  // Dataset header under the tabs: drawn once, same for both Stats tabs and Explore and Annotate
+  renderDatasetInfo(els.datasetInfo, datasetInfo);
+  if (!els.datasetInfo.hasChildNodes() && served) els.datasetInfo.textContent = served.id;
   if (!served) {
     showTab(route.tab);
     setStatus('Could not ask the dev server which dataset it serves. Start it with <code>npm run dev</code>.');

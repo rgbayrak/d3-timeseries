@@ -5,16 +5,23 @@ import {
   fetchPhysioRaw,
   fetchConfounds,
   fetchAnnotations,
+  fetchAnnotationProgress,
   saveAnnotations,
   getViewExtent,
 } from '@/data/bids-physio-reader';
 import type { ScanEntry, PhysioRaw, ConfoundsRaw } from '@/data/bids-physio-reader';
-import { computeSQI } from '@/data/sqi-metrics';
 import { getElements } from './dom';
 import { createState, sameScan } from './state';
-import { createAnnotation, toAnnotationsFile, fromAnnotationsFile } from './annotations';
+import {
+  createAnnotation,
+  toAnnotationsFile,
+  fromAnnotationsFile,
+  waveformAssessmentFromFile,
+  NO_ASSESSMENT,
+  WAVEFORM_QUALITIES,
+} from './annotations';
+import type { WaveformQuality } from '@/data/bids-physio-reader';
 import { renderAnnotationList } from './annotation-panel';
-import { createSqiTable } from './sqi-table';
 import { renderDatasetInfo, renderQualityBadges } from './info';
 import {
   populateSelect,
@@ -38,11 +45,6 @@ import type { StackChartsHandle } from './charts/stack';
 
 const els = getElements();
 const state = createState();
-const sqiTable = createSqiTable({
-  section: els.sqiSection,
-  container: els.sqiTableContainer,
-  controls: els.sqiColControls,
-});
 
 let focusContext: FocusContextHandle | null = null;
 let confoundsChart: ConfoundsChartHandle | null = null;
@@ -79,6 +81,16 @@ function renderAnnotations() {
   renderAnnotationList(els.annotationList, state.annotations, removeAnnotation);
 }
 
+/** Show the full-recording signal quality and notes held in state */
+function renderWaveformAssessment() {
+  els.waveformQuality.querySelectorAll<HTMLButtonElement>('button[data-quality]').forEach((btn) => {
+    const on = btn.dataset.quality === state.waveform.quality;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', String(on));
+  });
+  if (els.waveformComment.value !== state.waveform.comment) els.waveformComment.value = state.waveform.comment;
+}
+
 function persistAnnotations() {
   if (!state.current) return;
   const file = toAnnotationsFile(
@@ -86,11 +98,25 @@ function persistAnnotations() {
     state.current,
     els.channelSelect.value,
     state.raw?.samplingFrequency ?? 0,
+    state.waveform,
   );
-  saveAnnotations(file).catch((err) => {
-    console.error('Failed to save annotations', err);
-    setLoading('Failed to save annotation');
-  });
+  saveAnnotations(file)
+    .then(refreshAnnotationProgress)
+    .catch((err) => {
+      console.error('Failed to save annotations', err);
+      setLoading('Failed to save annotation');
+    });
+}
+
+/** "(24/80 ch:cardiac signals are annotated)": scans with anything saved for the channel shown */
+async function refreshAnnotationProgress() {
+  const channel = els.channelSelect.value;
+  if (!channel) return;
+  const progress = await fetchAnnotationProgress(channel).catch(() => null);
+  if (channel !== els.channelSelect.value) return; // channel changed while waiting
+  els.annotationProgress.textContent = progress
+    ? `(${progress.annotated}/${progress.total} ch:${channel} signals are annotated)`
+    : '';
 }
 
 async function loadSavedAnnotations(scan: ScanEntry, channel: string) {
@@ -99,9 +125,41 @@ async function loadSavedAnnotations(scan: ScanEntry, channel: string) {
   // Discard if the scan or channel changed while the request was in flight
   if (!sameScan(state.current, scan) || channel !== els.channelSelect.value) return;
   state.annotations = fromAnnotationsFile(stored);
+  state.waveform = waveformAssessmentFromFile(stored);
   focusContext?.redrawAnnotations();
   renderAnnotations();
+  renderWaveformAssessment();
 }
+
+// Whole-waveform rating: clicking the chosen rating again clears it
+els.waveformQuality.addEventListener('click', (e) => {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-quality]');
+  if (!btn || !state.current) return;
+  const q = btn.dataset.quality as WaveformQuality;
+  if (!WAVEFORM_QUALITIES.includes(q)) return;
+  state.waveform = { ...state.waveform, quality: state.waveform.quality === q ? null : q };
+  renderWaveformAssessment();
+  persistAnnotations();
+});
+
+// Whole-waveform comment: saved a moment after typing stops, and at once when
+// the box loses focus (which happens before any click that changes the scan)
+let commentTimer: ReturnType<typeof setTimeout> | null = null;
+
+function flushComment() {
+  if (commentTimer) clearTimeout(commentTimer);
+  commentTimer = null;
+  if (!state.current || els.waveformComment.value === state.waveform.comment) return;
+  state.waveform = { ...state.waveform, comment: els.waveformComment.value };
+  persistAnnotations();
+}
+
+els.waveformComment.addEventListener('input', () => {
+  if (commentTimer) clearTimeout(commentTimer);
+  commentTimer = setTimeout(flushComment, 800);
+});
+els.waveformComment.addEventListener('blur', flushComment);
+window.addEventListener('pagehide', flushComment);
 
 function addAnnotation(domain: [number, number]) {
   const label = window.prompt('Annotation label (e.g. "fix" to mark for reconstruction):', '');
@@ -139,8 +197,14 @@ function destroyCharts() {
 /** Rebuild the focus/overview charts for a channel; clears and reloads its annotations */
 function buildMainCharts(raw: PhysioRaw, channel: string) {
   destroyCharts();
+  // A typed comment was already saved when the box lost focus; never save it
+  // here, as state.current may already be the new scan
+  if (commentTimer) clearTimeout(commentTimer);
+  commentTimer = null;
   state.annotations = [];
+  state.waveform = { ...NO_ASSESSMENT };
   renderAnnotations();
+  renderWaveformAssessment();
   focusContext = buildFocusContext({
     raw,
     channel,
@@ -150,6 +214,18 @@ function buildMainCharts(raw: PhysioRaw, channel: string) {
     onXDomainChange: syncLinkedXDomain,
   });
   if (state.current) loadSavedAnnotations(state.current, channel);
+  void refreshAnnotationProgress(); // the count is per channel
+}
+
+// "Auxiliary" label: shown while the stacked channels or the confound chart is.
+// Those sections show and hide themselves from several places, so watch them.
+function syncAuxiliarySection() {
+  const shown = [els.stackSection, els.confoundsSection].some((el) => el.style.display !== 'none');
+  els.auxiliarySection.style.display = shown ? '' : 'none';
+}
+const auxiliaryObserver = new MutationObserver(syncAuxiliarySection);
+for (const el of [els.stackSection, els.confoundsSection]) {
+  auxiliaryObserver.observe(el, { attributes: true, attributeFilter: ['style'] });
 }
 
 function rebuildStack(raw: PhysioRaw) {
@@ -196,12 +272,9 @@ async function loadPhysio(scan: ScanEntry) {
     rebuildStack(state.raw);
     if (state.confounds) rebuildConfounds(state.confounds, state.raw);
     else els.confoundsSection.style.display = 'none';
-    if (state.sqi) sqiTable.show(state.sqi);
     return;
   }
 
-  state.sqi = null;
-  sqiTable.clear();
   setLoading('Loading...');
   try {
     const [raw, confounds] = await Promise.all([
@@ -328,27 +401,6 @@ els.annotateModeBtn.addEventListener('click', () => {
   els.annotateModeBtn.classList.toggle('active', state.annotateMode);
   els.annotateModeBtn.textContent = state.annotateMode ? 'Annotate: On' : 'Annotate: Off';
 });
-
-els.computeSqiBtn.addEventListener('click', () => {
-  if (!state.raw) return;
-  if (state.sqi) {
-    sqiTable.show(state.sqi);
-    return;
-  }
-  els.computeSqiBtn.disabled = true;
-  setLoading('Computing SQI...');
-  // Yield to the UI before the heavy computation
-  setTimeout(() => {
-    if (state.raw) {
-      state.sqi = computeSQI(state.raw);
-      sqiTable.show(state.sqi);
-    }
-    els.computeSqiBtn.disabled = false;
-    setLoading('');
-  }, 0);
-});
-
-els.hideSqiBtn.addEventListener('click', () => sqiTable.hide());
 
 // ── Init ────────────────────────────────────────────────
 

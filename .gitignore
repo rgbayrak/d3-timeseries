@@ -3,7 +3,7 @@ dist/
 *.local
 .vite/
 .claude/
-data/ds*/
+data/
 user_facing/
-data/annotations/
 CLAUDE.md
+.DS_Store

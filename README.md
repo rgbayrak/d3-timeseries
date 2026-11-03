@@ -44,7 +44,7 @@ npx vite-node scripts/compute-quality-metrics.ts ds006644
 
 The app loads a BIDS physiology dataset and presents an interactive viewer with:
 
-- **Controls** — four rows: Subject, Session, Task, Run (when present), Channel and Confound (when derivatives exist) dropdowns; Stack checkboxes for extra channels; Prev/Next buttons (or ←/→ keys) to step through scans in hierarchy order plus a search bar accepting `sub-03` or `ses-012` style input; Compute SQI and Annotate buttons
+- **Controls** — four rows: Subject, Session, Task, Run (when present), Channel and Confound (when derivatives exist) dropdowns; Stack checkboxes for extra channels; Prev/Next buttons (or ←/→ keys) to step through scans in hierarchy order plus a search bar accepting `sub-03` or `ses-012` style input; Annotate button
 - **Dataset info** — name, authors, BIDS version, license, DOI link and derivatives pipeline/version, read from the dataset's own `dataset_description.json` (raw and derivatives); fields that are missing are skipped
 - **Filename display** — shows the exact `.tsv.gz` file being viewed
 - **Badges** — a timing badge (see [Timing alignment](#timing-alignment)) and per-channel pass/fail quality indicators when a `_desc-quality.json` sidecar is present (run-level, e.g. `*_run-01_desc-quality.json`, or run-less)
@@ -53,8 +53,7 @@ The app loads a BIDS physiology dataset and presents an interactive viewer with:
 - **Stacked channels** — tick channels in the Stack row to add a compact figure for each, stacked below the annotations; they follow the focus chart's time window (zoom, brush, double-click reset), auto-fit their Y-axis to visible data, and have their own hover readout
 - **Confounds chart** — pick a motion confound from the Confound dropdown (shown only when fMRIPrep derivatives exist); FD is color-coded by severity (green/amber/red) with 0.2 mm and 0.5 mm reference lines
 - **Channel persistence** — selected channel and stacked channels are preserved when stepping through scans with Prev/Next; a reload resumes the last-viewed scan, channel, stacked channels and confound (saved per dataset in the browser's localStorage)
-- **SQI table** — on-demand per-channel signal quality metrics (mean, std dev, SNR, kurtosis, skewness, zero-crossing rate, etc.)
-- **Annotations** — toggle Annotate mode, drag on the focus chart to mark and label a time window; annotations persist to disk per `{sub, ses, task, run, channel}` and reload automatically when you return to that scan
+- **Annotations** box — *Full Recording*: rate the Signal Quality (Good, Bad, Fixable, Unknown) and write Notes; *Time Windows*: toggle Annotate mode, drag on the focus chart to mark and label a time window. Everything is saved to disk per `{sub, ses, task, run, channel}` (signal quality and notes first in the file) and reloads automatically when you return to that scan
 
 ## Dataset quality metrics
 
@@ -67,7 +66,7 @@ npx vite-node scripts/compute-quality-metrics.ts <dataset>      # folder name un
 npx vite-node scripts/compute-quality-metrics.ts mydata --bids-root /path/to/bids --deriv-root /path/to/derivatives/fmriprep
 ```
 
-The script runs the same metrics as the viewer's Compute SQI button on every readable scan and writes `data/quality/<dataset>/`:
+The script runs the per-channel signal quality metrics (`src/data/sqi-metrics.ts`) on every readable scan and writes `data/quality/<dataset>/`:
 
 - `quality_metrics.tsv`: one row per scan and physiological channel (`n/a` where a metric does not apply)
 - `dataset.json`: dataset description, scan and subject counts, `participants.tsv` and its descriptions, scans that could not be computed, and excluded channels
@@ -80,7 +79,7 @@ Only physiological channels are computed. Column names are checked against a dic
 - **Stats Group:** dataset info and a short summary, an interactive scatter plot (pick channel, Y, X and colouring; Y is a metric, X can be a metric or a participant variable such as age or sex), and the distribution of every metric. Hover a point for details; double-click it to open that scan.
 - **Stats Individual:** file name, dataset and participant info, scan details, the waveform of each physiological channel, and each metric with its percentile and position in the group histogram.
 - **Download PDF:** builds a PDF of every plot for the dataset (summary, each channel's scatter plot and distributions, and optionally one page per scan) and downloads it.
-- **Metrics menu:** tick which metrics to show, one by one or per group (Basic, Distribution, PaPaGei, PhysioQC). Hidden metrics leave the X/Y menus, histograms, the Stats Individual table and the PDF. The choice is remembered in your browser.
+- **Metrics shown** (sidebar): tick which metrics to show, listed under their groups (Basic, Distribution, PaPaGei, PhysioQC), or use Show all / Hide all. Hidden metrics leave the X/Y menus, histograms, the Stats Individual table and the PDF. The choice is remembered in your browser.
 
 What each metric computes, and its source, is described in [REVIEW.md](REVIEW.md).
 

@@ -17,6 +17,9 @@ import {
   availableMetrics,
   channelSummaries,
   colorGroups,
+  colorByOptions,
+  colorKey,
+  boldFacts,
   datasetSummaryText,
   humanList,
   defaultChannel,
@@ -202,6 +205,28 @@ describe('model', () => {
     expect(timingCounts(rows)).toEqual({ verified: 1, mismatch: 1 });
     expect(colorGroups(rows, 'task')).toEqual(['motor', 'rest']);
     expect(colorGroups(rows, 'sidecarAssessment')).toEqual(['(none)', 'Fail', 'Pass']);
+  });
+
+  it('bolds counts and sampling rates in the overview text only', () => {
+    expect(boldFacts('This dataset has 80 scans from 40 subjects across 2 tasks. Sampled at 496 Hz.')).toBe(
+      'This dataset has <strong>80 scans</strong> from <strong>40 subjects</strong> across <strong>2 tasks</strong>. ' +
+        'Sampled at <strong>496 Hz</strong>.',
+    );
+    expect(boldFacts('1 scan, 1 subject, 62.5 Hz')).toBe(
+      '<strong>1 scan</strong>, <strong>1 subject</strong>, <strong>62.5 Hz</strong>',
+    );
+    expect(boldFacts('No numbers here.')).toBe('No numbers here.');
+  });
+
+  it('offers only the Colour by choices the dataset has', () => {
+    // No sessions, one task, one timing status, no sidecar: nothing to colour by
+    const plain = [row({ sub: '01', ses: '', task: 'rest' }), row({ sub: '02', ses: '', task: 'rest' })];
+    expect(colorByOptions(plain)).toEqual([]);
+    // Two tasks and two sessions: both offered, in the usual order
+    const varied = [row({ sub: '01', ses: '01', task: 'rest' }), row({ sub: '01', ses: '02', task: 'motor' })];
+    expect(colorByOptions(varied).map((o) => o.key)).toEqual(expect.arrayContaining(['task', 'ses']));
+    expect(colorByOptions(varied).map((o) => o.key).slice(0, 2)).toEqual(['task', 'ses']);
+    expect(colorKey(plain[0], 'none')).toBe('All recordings');
   });
 
   it('describes a uniform dataset in one short paragraph', () => {

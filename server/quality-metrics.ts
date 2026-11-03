@@ -31,8 +31,8 @@ import type {
   WaveformFile,
 } from '../src/quality/metrics-tsv';
 
-// Dataset-wide quality metrics: runs the same per-channel metrics as the
-// viewer's "Compute SQI" button (src/data/sqi-metrics.ts) over every readable
+// Dataset-wide quality metrics: runs the per-channel metrics
+// (src/data/sqi-metrics.ts) over every readable
 // scan and writes them to data/quality/<dataset>/. Output depends only on the
 // input files: scans are in sorted order and nothing time- or machine-specific
 // is written.

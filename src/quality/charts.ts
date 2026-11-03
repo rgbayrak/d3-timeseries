@@ -42,7 +42,7 @@ const FAMILY = {
 
 /**
  * One colour per metric group (Basic, Distribution, PaPaGei, PhysioQC), used
- * wherever a metric appears: histogram bars and the Metrics menu dots. These
+ * wherever a metric appears (histogram bars). These
  * are the page's lead colours: the scatter palette is built from them.
  */
 export const METRIC_GROUP_COLORS: Record<string, string> = {

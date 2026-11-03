@@ -55,7 +55,7 @@ src/
 │   ├── state.ts               # The single ViewerState object
 │   ├── annotations.ts         # Annotation model <-> stored JSON (pure)
 │   ├── annotation-panel.ts    # Annotation list rendering, HTML escaping
-│   ├── sqi-table.ts           # SQI column definitions, visibility, table rendering
+│   ├── sqi-table.ts           # Metric labels, groups and number format (used by the Stats tabs)
 │   ├── info.ts                # Dataset info line, timing/quality badges
 │   ├── controls.ts            # Dropdowns, stacked-channel checkboxes
 │   ├── navigation.ts          # Prev/next stepping, search resolution (pure)
@@ -78,7 +78,7 @@ src/
 │   ├── envelope.ts            # Min/max downsampling for waveforms (pure)
 │   ├── stats.ts               # Histogram bins, percentiles (pure)
 │   ├── route.ts               # #group / #subject?… links (pure)
-│   ├── metric-picker.ts       # Metrics drop-down: show/hide metrics per metric or group
+│   ├── metric-picker.ts       # "Metrics shown" sidebar list: show/hide each metric
 │   ├── linked-scan.ts         # Shares the open scan with Explore and Annotate (via its localStorage entry)
 │   └── data.ts                # Fetches the served dataset's data/quality/ files
 ├── shell/
@@ -173,7 +173,7 @@ How the server and viewer line up physio, confounds and triggers in time is desc
 A metric is computed in one place and listed in three:
 
 1. **Compute it** in `computeChannelMetrics()` (`src/data/sqi-metrics.ts`) and add the field to the `ChannelMetrics` interface. Return `NaN` when it does not apply to a channel.
-2. **Label it** in `SQI_COLUMNS` (`src/viewer/sqi-table.ts`): label, decimals, description and group. Both the viewer's SQI table and the quality page use these labels.
+2. **Label it** in `SQI_COLUMNS` (`src/viewer/sqi-table.ts`): label, decimals, description and group. The Stats tabs and their PDF use these labels.
 3. **Give it a TSV column** in `METRIC_COLUMNS` (`src/quality/metrics-tsv.ts`), in snake_case. The column order there is the TSV column order.
 4. **Document it** in [REVIEW.md](REVIEW.md): what it computes, which channels it applies to, and its citation.
 5. **Test it** in `src/data/__tests__/sqi-metrics.test.ts` with a synthetic signal of known value.

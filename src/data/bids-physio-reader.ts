@@ -172,7 +172,14 @@ export interface StoredAnnotation {
   end_sample: number;
 }
 
+/** Rating of a whole waveform in Explore and Annotate */
+export type WaveformQuality = 'good' | 'bad' | 'fixable' | 'unknown';
+
 export interface AnnotationsFile {
+  /** Whole-waveform rating; absent in files saved before it existed */
+  waveform_quality?: WaveformQuality | null;
+  /** Whole-waveform quality analysis comment; absent in older files */
+  waveform_comment?: string;
   sub: string;
   ses: string;
   task: string;
@@ -192,6 +199,13 @@ export async function fetchAnnotations(
   const res = await fetch(
     `/api/bids/annotations?sub=${sub}&ses=${ses}&task=${task}&run=${run}&channel=${encodeURIComponent(channel)}`,
   );
+  if (!res.ok) return null;
+  return res.json();
+}
+
+/** How many scans have anything saved (signal quality, notes or time windows) for one channel */
+export async function fetchAnnotationProgress(channel: string): Promise<{ annotated: number; total: number } | null> {
+  const res = await fetch(`/api/bids/annotation-progress?channel=${encodeURIComponent(channel)}`);
   if (!res.ok) return null;
   return res.json();
 }

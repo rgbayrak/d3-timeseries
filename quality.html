@@ -9,7 +9,10 @@
     /* Stats theme: purple and blue. Every colour on this page comes from one
        coordinated family in src/quality/charts.ts (THEME, mirrored here, and
        FAMILY, which feeds METRIC_GROUP_COLORS and the scatter PALETTE). Add new
-       colours from there, not new hues. Pass/fail badges keep green/amber/red. */
+       colours from there, not new hues. Pass/fail badges keep green/amber/red.
+       Buttons and text are the exception: they use the neutral .btn style and
+       the text sizes and colours shared with Explore and Annotate
+       (src/shell/tabs.css), so text looks the same on every tab. */
     :root {
       --violet: #7b4fd0;
       --violet-deep: #5b34ad;
@@ -17,9 +20,9 @@
       --violet-hover: #e4dafb;
       --blue: #4a6cd4;
       --blue-soft: #eaf0fd;
-      --ink: #231f3d;
-      --ink-2: #5b5875;
-      --ink-3: #8a86a3;
+      --ink: var(--text);
+      --ink-2: var(--text-2);
+      --ink-3: var(--text-3);
       --line: #ddd8ee;
       --grad: linear-gradient(90deg, var(--violet), var(--blue));
       /* folder tabs (src/shell/tabs.css) */
@@ -28,44 +31,85 @@
     }
 
     body {
-      font-family: sans-serif;
       margin: 0;
       padding: 24px;
-      background: #fff;
-      color: var(--ink);
       accent-color: var(--violet); /* checkboxes */
     }
 
+    /* Same width as Explore and Annotate, so the tabs and dataset header stay put */
     .page {
-      max-width: 1000px;
+      max-width: 960px;
       margin: 0 auto;
     }
 
-    header {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      flex-wrap: wrap;
-      border-bottom: 1px solid var(--line);
-      padding-bottom: 10px;
-      margin-bottom: 12px;
+    /* Sidebar (1/4) beside the graphs (3/4); stacked on narrow screens */
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
+      gap: 24px;
+      align-items: start;
     }
 
-    header label,
+    /* Raised so the open Metrics drop-down sits over the graphs */
+    .sidebar {
+      position: relative;
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      font-size: 13px;
+    }
+
+    /* Sidebar block titles use the shared .section-label lettering */
+    .sidebar .section-label {
+      margin-bottom: 6px;
+    }
+
+    /* Short divider between sidebar blocks, same as between sections */
+    .side-block + .side-block::before {
+      content: '';
+      display: block;
+      width: 48px;
+      height: 2px;
+      margin-bottom: 14px;
+      background: #c9c9d3;
+      border-radius: 1px;
+    }
+
+    /* One key/value per line in the narrow column */
+    .sidebar .kv-grid {
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .sidebar .kv .v {
+      overflow-wrap: anywhere;
+    }
+
+    #pdf-btn {
+      margin-top: 8px;
+    }
+
+    .graphs {
+      min-width: 0;
+    }
+
+    .graphs svg {
+      max-width: 100%;
+      height: auto;
+    }
+
+    @media (max-width: 760px) {
+      .layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
     .controls label {
       font-size: 14px;
       display: flex;
       align-items: center;
       gap: 4px;
-    }
-
-    select {
-      font-size: 14px;
-      padding: 2px 6px;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      color: var(--ink);
-      background: #fff;
     }
 
     select:focus-visible,
@@ -75,159 +119,92 @@
       outline-offset: 1px;
     }
 
-    /* Pill buttons; Download PDF is the one gradient (primary) action */
-    #scan-prev,
-    #scan-next {
-      font-size: 13px;
-      padding: 3px 14px;
-      cursor: pointer;
-      border: 1px solid var(--violet);
-      border-radius: 14px;
-      background: var(--violet-soft);
-      color: var(--violet-deep);
-      font-weight: 600;
-    }
+    /* Buttons use the shared .btn style (src/shell/tabs.css) */
 
-    #scan-prev:hover:not(:disabled),
-    #scan-next:hover:not(:disabled) {
-      background: var(--violet-hover);
-    }
-
-    #pdf-btn {
-      font-size: 13px;
-      font-weight: 600;
-      padding: 5px 16px;
-      cursor: pointer;
-      border: none;
-      border-radius: 14px;
-      background: var(--grad);
-      color: #fff;
-      box-shadow: 0 2px 6px rgba(91, 52, 173, 0.25);
-      transition: transform 0.1s, box-shadow 0.1s;
-    }
-
-    #pdf-btn:hover:not(:disabled) {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 10px rgba(91, 52, 173, 0.3);
-    }
-
-    .page .folder-tabs {
+    .page .folder-tabs,
+    .page .dataset-header {
       max-width: none;
     }
 
-    /* Metrics picker: drop-down of checkboxes in the toolbar */
+    /* Metrics shown: listed in the sidebar; group names are fixed headings,
+       each metric row has a plain checkmark on the right */
     .metric-picker {
-      position: relative;
       font-size: 13px;
     }
 
-    .metric-picker > summary {
+    .metric-picker-actions {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+
+    .metric-count {
+      margin-bottom: 6px;
+    }
+
+    .metric-group + .metric-group {
+      margin-top: 8px;
+    }
+
+    .metric-group-name {
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .metric-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 2px 4px;
+      border-radius: 4px;
       cursor: pointer;
-      padding: 3px 12px;
-      border: 1px solid var(--blue);
-      border-radius: 14px;
-      background: var(--blue-soft);
-      color: var(--ink);
-      list-style: none;
       user-select: none;
     }
 
-    .metric-picker > summary::-webkit-details-marker {
-      display: none;
+    .metric-row:hover {
+      background: #f1f3f6;
     }
 
-    .metric-picker > summary::after {
-      content: ' ▾';
-      color: var(--blue);
-    }
-
-    .metric-picker[open] > summary {
-      background: #dbe5fb;
-    }
-
-    .metric-picker-panel {
-      position: absolute;
-      top: calc(100% + 4px);
-      left: 0;
-      z-index: 20;
-      width: min(560px, calc(100vw - 32px));
-      max-height: 70vh;
-      overflow: auto;
-      padding: 10px 12px;
-      background: #fff;
-      border: 1px solid var(--line);
-      border-top: 3px solid var(--violet);
-      border-radius: 8px;
-      box-shadow: 0 6px 18px rgba(35, 31, 61, 0.14);
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-      gap: 8px 14px;
-    }
-
-    .metric-picker-actions {
-      grid-column: 1 / -1;
-      display: flex;
-      gap: 6px;
-    }
-
-    .metric-picker-actions button {
-      font-size: 12px;
-      padding: 2px 10px;
-      cursor: pointer;
-      border: 1px solid var(--violet);
-      border-radius: 12px;
-      background: var(--violet-soft);
-      color: var(--violet-deep);
-    }
-
-    .metric-picker-actions button:hover {
-      background: var(--violet-hover);
-    }
-
-    .metric-picker fieldset {
-      border: none;
+    /* Mini box; a thin tick inside when the metric is shown */
+    .metric-check {
+      appearance: none;
+      -webkit-appearance: none;
+      position: relative;
       margin: 0;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-    }
-
-    .metric-picker legend {
-      font-weight: 600;
-      padding: 0 0 2px;
-      color: var(--violet-deep);
-    }
-
-    .metric-picker label {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      font-size: 12px !important;
+      width: 12px;
+      height: 12px;
+      flex: none;
+      border: 1px solid #b8bec6;
+      border-radius: 2px;
+      background: #fff;
       cursor: pointer;
     }
 
-    .metric-picker label[title] {
-      cursor: help;
+    .metric-check:checked::before {
+      content: '';
+      position: absolute;
+      left: 3.5px;
+      top: 1px;
+      width: 3px;
+      height: 6px;
+      border: solid var(--text);
+      border-width: 0 1.5px 1.5px 0;
+      transform: rotate(45deg);
     }
 
-    /* Group colour, same as that group's histograms */
-    .metric-dot {
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      flex: none;
+    .metric-check:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 1px;
+      border-radius: 3px;
     }
 
     .pdf-option {
-      margin-left: auto;
-      font-size: 13px !important;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 13px;
       color: var(--ink-2);
-    }
-
-    button:disabled {
-      cursor: not-allowed;
-      opacity: 0.6;
     }
 
     #status {
@@ -249,9 +226,7 @@
     }
 
     h3 {
-      font-size: 14px;
       margin: 20px 0 8px;
-      color: var(--ink);
     }
 
     /* Short divider line between sections (not before a tab's first section) */
@@ -266,16 +241,12 @@
     }
 
     h4 {
-      font-size: 13px;
       margin: 14px 0 6px;
-      color: var(--ink);
-      font-weight: 600;
     }
 
-    .muted,
     #scatter-note {
       font-size: 12px;
-      color: var(--ink-3);
+      color: var(--text-3);
     }
 
     .empty {
@@ -287,33 +258,26 @@
       border-radius: 10px;
     }
 
-    /* Dataset info (same look as the viewer) */
-    .dataset-info {
-      font-size: 13px;
-      color: var(--ink-2);
-      margin-bottom: 8px;
-    }
-
-    .dataset-info .dataset-name {
-      font-size: 16px;
-      font-weight: 700;
-      color: var(--ink);
-    }
-
-    .dataset-info .dataset-meta {
-      margin-top: 2px;
-    }
-
-    .dataset-info a {
-      color: var(--blue);
-    }
-
+    /* Dataset overview (sidebar, Stats Group): the key facts bold and dark, the rest lighter */
     .summary-text {
       font-size: 13px;
       line-height: 1.5;
-      color: var(--ink);
-      margin: 6px 0 8px;
-      max-width: 760px;
+      color: var(--text-2);
+      margin: 0 0 8px;
+    }
+
+    .summary-text strong {
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    /* Narrow column: let the table scroll and its headers wrap */
+    .summary-wrap {
+      overflow-x: auto;
+    }
+
+    .sidebar .summary-table th {
+      white-space: normal;
     }
 
     table {
@@ -353,6 +317,19 @@
       overflow-x: auto;
     }
 
+    /* Stats Individual, per channel: heading, table, note, histograms, with room between them */
+    #subject-metrics section + section {
+      margin-top: 28px;
+    }
+
+    #subject-metrics .metrics-wrap {
+      margin-bottom: 14px;
+    }
+
+    #subject-metrics section > .muted {
+      margin-bottom: 8px;
+    }
+
     .metrics-table .pct {
       display: block;
       font-size: 10px;
@@ -382,21 +359,12 @@
       stroke: #9a95b5;
     }
 
-    .axis text {
-      fill: var(--ink-2);
-    }
-
     .grid line {
       shape-rendering: crispEdges;
     }
 
     .grid path {
       display: none;
-    }
-
-    .axis-label {
-      font-size: 13px;
-      font-weight: 600;
     }
 
     #scatter-legend {
@@ -447,14 +415,6 @@
       color: var(--blue);
     }
 
-    #subject-filename {
-      font-family: monospace;
-      font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 6px;
-      word-break: break-all;
-      color: var(--violet-deep);
-    }
 
     .kv-grid {
       display: flex;
@@ -520,19 +480,43 @@
       <button id="tab-group" class="folder-tab active" type="button">Stats Group</button>
       <button id="tab-subject" class="folder-tab" type="button">Stats Individual</button>
     </nav>
-    <header>
-      <details id="metric-picker"></details>
-      <label class="pdf-option" title="Add one page per scan with its waveforms and metrics"><input id="pdf-scans" type="checkbox" checked> Include each scan</label>
-      <button id="pdf-btn" type="button" title="Download a PDF with every plot for this dataset: summary, each channel's scatter plot and distributions, and (optionally) one page per scan">Download PDF</button>
-    </header>
+    <div id="dataset-info" class="dataset-header"></div>
 
+    <!-- Under the dataset header: sidebar (1/4) with settings and scan info, graphs (3/4) -->
+    <div class="layout">
+      <aside class="sidebar" aria-label="Settings and scan information">
+        <!-- Stats Group only -->
+        <div id="side-overview" class="side-block">
+          <div class="section-label">Dataset overview</div>
+          <div id="group-summary"></div>
+        </div>
+
+        <div id="side-subject" class="side-block" style="display:none">
+          <div class="section-label">Participant info</div>
+          <div id="subject-participant"></div>
+        </div>
+
+        <div id="side-scan" class="side-block" style="display:none">
+          <div class="section-label">Recording details</div>
+          <div id="subject-scan"></div>
+        </div>
+
+        <div class="side-block">
+          <div class="section-label">Download</div>
+          <label class="pdf-option" title="Add one page per scan with its waveforms and metrics"><input id="pdf-scans" type="checkbox" checked> Include each scan</label>
+          <button id="pdf-btn" class="btn" type="button" title="Download a PDF with every plot for this dataset: summary, each channel's scatter plot and distributions, and (optionally) one page per scan">Download PDF</button>
+        </div>
+
+        <div class="side-block">
+          <div class="section-label">Metrics shown</div>
+          <div id="metric-picker"></div>
+        </div>
+      </aside>
+
+      <main class="graphs">
     <div id="status" style="display:none"></div>
 
     <section id="group-tab">
-      <h3>Dataset overview</h3>
-      <div id="group-dataset-info" class="dataset-info"></div>
-      <div id="group-summary"></div>
-
       <h3>Compare two metrics across all recordings</h3>
       <div class="controls">
         <label>Channel <select id="channel-select"></select></label>
@@ -552,26 +536,21 @@
 
     <section id="subject-tab" style="display:none">
       <div class="scan-picker">
-        <button id="scan-prev" type="button">&laquo; Prev</button>
-        <select id="scan-select"></select>
-        <button id="scan-next" type="button">Next &raquo;</button>
+        <button id="scan-prev" class="btn" type="button">&laquo; Prev</button>
+        <button id="scan-next" class="btn" type="button">Next &raquo;</button>
         <a class="open-viewer" href="/" title="Explore and Annotate opens on the scan shown here">Open this scan in Explore and Annotate &rarr;</a>
       </div>
-      <div id="subject-filename"></div>
-      <div id="subject-dataset-info" class="dataset-info"></div>
-      <h3>Who was recorded</h3>
-      <div id="subject-participant"></div>
-      <h3>Recording details</h3>
-      <div id="subject-scan"></div>
+      <div class="now-viewing"><span class="now-viewing-label">Now viewing:</span> <span id="subject-filename" class="now-viewing-file"></span></div>
 
       <h3>Signals over the whole recording</h3>
       <div id="subject-waveforms"></div>
 
       <h3>Quality metrics for this scan</h3>
       <div class="muted">Each value's percentile is among all recordings of the same channel in this dataset.</div>
-      <div id="subject-metrics-table" class="metrics-wrap"></div>
-      <div id="subject-histograms"></div>
+      <div id="subject-metrics"></div>
     </section>
+      </main>
+    </div>
   </div>
   <script type="module" src="/src/quality/main.ts"></script>
 </body>

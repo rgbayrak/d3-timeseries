@@ -1,11 +1,10 @@
 import type { ChartInstance } from '@/core';
-import { renderDatasetInfo } from '@/viewer/info';
-import type { DatasetInfo } from '@/data/bids-physio-reader';
 import type { ScanKeyLike, QualityRow } from './metrics-tsv';
 import type { LoadedDataset } from './data';
 import { drawScatter, drawHistogram, metricColor, PALETTE } from './charts';
 import {
-  COLOR_BY_OPTIONS,
+  colorByOptions,
+  boldFacts,
   availableMetrics,
   axisText,
   colorGroups,
@@ -27,7 +26,6 @@ import {
 import type { AxisChoice, ColorBy, VisibleMetrics } from './model';
 
 export interface GroupTabElements {
-  datasetInfo: HTMLElement;
   summary: HTMLElement;
   channelSelect: HTMLSelectElement;
   xSelect: HTMLSelectElement;
@@ -57,7 +55,7 @@ export interface GroupTab {
   setVisibleMetrics: (visible: VisibleMetrics) => void;
 }
 
-const NOTHING_TO_SHOW = 'No metrics to show for this channel. Check the Metrics menu above.';
+const NOTHING_TO_SHOW = 'No metrics to show for this channel. Check Metrics shown in the sidebar.';
 
 function scanLabel(r: ScanKeyLike): string {
   return [`sub-${r.sub}`, r.ses && `ses-${r.ses}`, `task-${r.task}`, r.run && `run-${r.run}`].filter(Boolean).join(' ');
@@ -72,12 +70,12 @@ function fillSelect(select: HTMLSelectElement, options: { value: string; label: 
 
 function summaryHtml(data: LoadedDataset): string {
   const s = data.summary;
-  let html = `<p class="summary-text">${esc(datasetSummaryText(s, data.rows))}</p>`;
+  let html = `<p class="summary-text">${boldFacts(esc(datasetSummaryText(s, data.rows)))}</p>`;
   const table = summaryTable(data.rows, s.channels);
   if (table) {
-    html += `<table class="summary-table"><thead><tr>${table.header.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>`;
+    html += `<div class="summary-wrap"><table class="summary-table"><thead><tr>${table.header.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>`;
     for (const r of table.rows) html += `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`;
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
   }
   if (s.failedScans.length > 0) {
     html += `<details class="failed-scans"><summary>${s.failedScans.length} scans could not be computed</summary><ul>`;
@@ -125,6 +123,7 @@ export function createGroupTab(
   let channel = '';
   let xValue = 'snr';
   let yValue = 'beatCorrelation';
+  /** Set from the dataset's choices in show() */
   let colorBy: ColorBy = 'task';
   let charts: ChartInstance[] = [];
   let xChoices: AxisChoice[] = [];
@@ -230,18 +229,18 @@ export function createGroupTab(
   return {
     show(next) {
       data = next;
-      renderDatasetInfo(els.datasetInfo, next.summary.info as DatasetInfo);
-      if (!els.datasetInfo.hasChildNodes()) els.datasetInfo.textContent = next.summary.dataset;
       els.summary.innerHTML = summaryHtml(next);
 
       const channels = next.summary.channels;
       if (!channels.includes(channel)) channel = defaultChannel(channels);
       fillSelect(els.channelSelect, channels.map((c) => ({ value: c, label: c })), channel);
-      fillSelect(
-        els.colorSelect,
-        COLOR_BY_OPTIONS.map((o) => ({ value: o.key, label: o.label })),
-        colorBy,
-      );
+      // Only choices this dataset has (no Session without sessions, no Task with one task);
+      // with none at all, hide the menu and draw every point in one colour
+      const colorChoices = colorByOptions(next.rows);
+      if (!colorChoices.some((o) => o.key === colorBy)) colorBy = colorChoices[0]?.key ?? 'none';
+      fillSelect(els.colorSelect, colorChoices.map((o) => ({ value: o.key, label: o.label })), colorBy);
+      const colorLabel = els.colorSelect.closest('label');
+      if (colorLabel) colorLabel.style.display = colorChoices.length ? '' : 'none';
       refreshAxisSelects();
       renderPlots();
     },

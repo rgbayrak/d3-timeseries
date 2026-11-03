@@ -38,6 +38,9 @@ export function renderDatasetInfo(el: HTMLElement, info: DatasetInfo | null): vo
     meta.append(p);
   });
   el.appendChild(meta);
+  // The header shows one line of each; hover for the full text
+  nameEl.title = nameEl.textContent ?? '';
+  meta.title = meta.textContent ?? '';
 }
 
 export const TIMING_LABELS: Record<TimingStatus, string> = {
