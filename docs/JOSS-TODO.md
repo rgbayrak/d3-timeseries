@@ -16,7 +16,7 @@ Today the server only runs as a Vite dev-mode plugin; reviewers must be able to
 install and run the tool from the README.
 
 - [ ] Move the request handling out of `server/bids-physio-plugin.ts` into a plain Node module, with the Vite plugin as a thin wrapper over it
-- [ ] Standalone Node server that serves the production build (`npm run build`) and the `/api/bids/*` endpoints
+- [ ] Standalone Node server that serves the production build (`npm run build`, which includes `quality.html`), the `/api/bids/*` endpoints and the computed `data/quality/` files
 - [ ] Single launch command, e.g. `npx physai-qa-interactive --bids-root <path> [--derivatives <path>]`
 - [ ] Tests for the endpoints (status codes, JSON shapes, 400 on unsafe input) against the fixtures
 
@@ -31,7 +31,7 @@ install and run the tool from the README.
 - [ ] **Statement of need** in the README: what problem it solves and who it's for
 - [ ] **Installation instructions** for the packaged tool, with dependencies (Node version) listed
 - [ ] **Example usage**: a walkthrough on a public OpenNeuro dataset (fetch with DataLad, launch, review, annotate) with the expected output files
-- [ ] **API documentation** for the chart library (e.g. generated with TypeDoc) and the annotation file format
+- [ ] **API documentation** for the chart library (e.g. generated with TypeDoc), the annotation file format and the quality metrics outputs (`quality_metrics.tsv` columns, `dataset.json`); metric definitions are in `REVIEW.md`
 - [ ] **Community guidelines**: how to contribute (`CONTRIBUTING.md` ✓), report issues and get support (Issues and Discussions enabled ✓). Add issue templates and a "Getting help" section in the README pointing to Discussions
 - [ ] Code of conduct (`CODE_OF_CONDUCT.md`, e.g. Contributor Covenant)
 - [ ] `CITATION.cff`: set `version` and `date-released` for the reviewed release (authors, ORCIDs and affiliations done)
@@ -45,6 +45,7 @@ install and run the tool from the README.
 - [x] **Statement of need**: the research problem and target users. Drafted; needs your review
 - [x] **Software design**: add the standalone server and launch command once Phase 2 lands
 - [ ] **Research use**: add labs tested the tool (TODO comment in the paper)
+- [ ] Metric citations: resolve the open items in `REVIEW.md` (ApEn attribution, missing PaPaGei and Romano 2023 references in `paper.bib`) before the paper cites the metrics
 - [ ] Acknowledgements and funding
 - [ ] Build the PDF locally or with the JOSS GitHub Action (`openjournals/openjournals-draft-action`) and check it renders
 

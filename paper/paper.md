@@ -51,9 +51,10 @@ quality metrics, compare physiological events across modalities, and annotate
 artifacts directly on the signal under review. Keeping visualization and
 annotation together streamlines review, and recording every decision in one
 shared format makes quality assessment consistent and reproducible across raters. 
-The outputs, per-channel quality metrics and artifact annotations, are stored as
-human-readable JSON files for use in downstream processing, whether to define
-inclusion criteria for an analysis or to guide artifact correction.
+The outputs, per-channel quality metrics for every scan (one TSV per dataset)
+and artifact annotations (JSON), are stored as human-readable files for use in
+downstream processing, whether to define inclusion criteria for an analysis or
+to guide artifact correction.
 
 # Statement of need
 
@@ -69,7 +70,7 @@ recording quality and expertise in data handling.
 # State of the field
 
 Quality assessment of physiological signals poses challenges distinct from
-those addressed by established neuroimaging QA pipelines [@gray2009;
+those addressed by established neuroimaging quality assessment pipelines [@gray2009;
 @bulte2017]. For fMRI, automated tools such as MRIQC [@esteban2017] have
 standardized quality evaluation through image quality metrics and visual
 reports, and their use has been formalized into reproducible QC protocols
@@ -87,7 +88,7 @@ established in biomedical engineering [@orphanidou2015; @li2012; @elgendi2016]
 and available in general-purpose toolboxes such as NeuroKit2
 [@makowski2021]. Beyond these, most labs that use physiological measures 
 rely on their own in-house scripts and viewers, 
-so QA practices vary widely between groups. This inconsistency is
+so quality assessment practices vary widely between groups. This inconsistency is
 a significant obstacle for large-scale studies and data-sharing initiatives, 
 where standardized quality control is essential.
 
@@ -121,7 +122,11 @@ whole datasets. It has three key components:
   browser as a JSON API.
 - **Signal quality metrics.** Whole-recording statistics for every channel,
   plus windowed and beat-level metrics for cardiac [@elgendi2016; @pincus1991]
-  and respiratory channels.
+  and respiratory channels. A script computes them for every scan of a
+  dataset, keeping only physiological channels, and writes one TSV per
+  dataset; a dataset view plots any two metrics (or a metric against a
+  participant variable such as age), opens any scan with its waveforms and
+  its position in the group distribution, and exports a PDF report.
 - **Viewer and annotation.** Linked overview and detail charts, built on a
   TypeScript chart library over D3 [@bostock2011], stay responsive on
   high-rate recordings. Extra channels and motion confounds follow the same
@@ -130,10 +135,19 @@ whole datasets. It has three key components:
   of its state in a single object; charts, controls, annotations and the
   signal quality table are separate modules that receive state and page
   elements as arguments rather than reaching into the page themselves.
+- **Group and Individual tabs.** Beyond single-scan review, offers a dataset-level view.
+  Quality metrics are precomputed for every physiological recording in a dataset
+  and stored in a single table, which the group tab loads to summarize quality
+  across the whole dataset, with interactive scatter plots. Outliers can be followed 
+  directly: selecting a point opens an individual view of that scan, 
+  which shows its waveforms, available subject information, and where 
+  each of its quality metrics falls in the group distribution. Moving
+  between the group and individual views lets researchers find problem scans
+  quickly and see why they stand out.
 
 These follow four design goals: a low entry barrier (any standard BIDS dataset,
 no configuration), standardized checks with flexible judgement (fixed metric
-definitions and annotation format; each team decides exclusions and labels),
+definitions and annotation format;
 transparency (documented metrics, outputs stored as plain files), and
 modularity (data access and metrics separate from the interface).
 
@@ -147,7 +161,9 @@ cover:
   confound reading, on two small synthetic BIDS datasets included in the
   repository and on real OpenNeuro [@markiewicz2021] datasets when present.
 - **Timing checks:** trigger detection and verification.
-- **Signal quality metrics:** values on synthetic signals with known statistics.
+- **Signal quality metrics:** values on synthetic signals with known statistics,
+  and the dataset-wide metrics output (file format, identical output on reruns,
+  exclusion of non-physiological channels).
 - **Annotations:** saving, loading, and rejection of unsafe file paths.
 - **Interface logic:** annotation format, scan navigation and search, session
   resume, chart helpers and the signal quality table.
