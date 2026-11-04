@@ -203,8 +203,15 @@ export async function fetchAnnotations(
   return res.json();
 }
 
+export interface AnnotationProgress {
+  annotated: number;
+  total: number;
+  /** Earliest scan (hierarchy order) with nothing saved for the channel; null when all are annotated */
+  firstUnannotated: ScanEntry | null;
+}
+
 /** How many scans have anything saved (signal quality, notes or time windows) for one channel */
-export async function fetchAnnotationProgress(channel: string): Promise<{ annotated: number; total: number } | null> {
+export async function fetchAnnotationProgress(channel: string): Promise<AnnotationProgress | null> {
   const res = await fetch(`/api/bids/annotation-progress?channel=${encodeURIComponent(channel)}`);
   if (!res.ok) return null;
   return res.json();

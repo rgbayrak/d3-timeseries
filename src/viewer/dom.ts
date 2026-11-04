@@ -13,8 +13,10 @@ export interface ViewerElements {
   searchInput: HTMLInputElement;
   datasetInfo: HTMLElement;
   filename: HTMLElement;
-  /** "(24/80 ch:cardiac signals are annotated)" next to the file name */
+  /** "(24/80 cardiac signals are annotated)" under the Annotations title */
   annotationProgress: HTMLElement;
+  /** Its mini progress bar (fill width and colour) */
+  annotationProgressBar: HTMLElement;
   qualityBadges: HTMLElement;
   loading: HTMLElement;
   confoundsSection: HTMLElement;
@@ -25,10 +27,21 @@ export interface ViewerElements {
   waveformQuality: HTMLElement;
   waveformComment: HTMLTextAreaElement;
   stackRow: HTMLElement;
+  /** Controls row labelled Auxiliary: holds the Stack checkboxes and the Confound dropdown */
+  auxRow: HTMLElement;
   stackChannels: HTMLElement;
   stackSection: HTMLElement;
   /** Wraps the stack and confounds sections under the "Auxiliary" label */
   auxiliarySection: HTMLElement;
+  /** Stats folder tab and the scatter plot: shown only when quality metrics exist */
+  statsTab: HTMLElement;
+  scatterSection: HTMLElement;
+  scatterX: HTMLSelectElement;
+  scatterY: HTMLSelectElement;
+  scatterColor: HTMLSelectElement;
+  scatterChart: HTMLElement;
+  scatterLegend: HTMLElement;
+  scatterNote: HTMLElement;
 }
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -54,6 +67,7 @@ export function getElements(): ViewerElements {
     datasetInfo: byId('dataset-info'),
     filename: byId('filename'),
     annotationProgress: byId('annotation-progress'),
+    annotationProgressBar: byId('annotation-progress-bar'),
     qualityBadges: byId('quality-badges'),
     loading: byId('loading'),
     confoundsSection: byId('confounds-section'),
@@ -63,8 +77,17 @@ export function getElements(): ViewerElements {
     waveformQuality: byId('waveform-quality'),
     waveformComment: byId('waveform-comment'),
     stackRow: byId('stack-row'),
+    auxRow: byId('aux-row'),
     stackChannels: byId('stack-channels'),
     stackSection: byId('stack-section'),
     auxiliarySection: byId('auxiliary-section'),
+    statsTab: byId('stats-tab'),
+    scatterSection: byId('scatter-section'),
+    scatterX: byId('scatter-x'),
+    scatterY: byId('scatter-y'),
+    scatterColor: byId('scatter-color'),
+    scatterChart: byId('scatter-chart'),
+    scatterLegend: byId('scatter-legend'),
+    scatterNote: byId('scatter-note'),
   };
 }

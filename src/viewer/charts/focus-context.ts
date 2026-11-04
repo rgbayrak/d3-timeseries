@@ -36,6 +36,16 @@ export interface FocusContextHandle {
 /** Minimum brush width (px) on the focus chart; narrower drags are treated as clicks */
 const MIN_BRUSH_PX = 5;
 
+/** Room above the overview chart for the window-length label */
+const CONTEXT_LABEL_SPACE = 16;
+
+/** Window length shown over the overview's selection, e.g. "60 sec", "7.5 sec", "0.25 sec" */
+export function windowLengthLabel(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '';
+  const s = seconds >= 10 ? Math.round(seconds) : seconds >= 1 ? Math.round(seconds * 10) / 10 : Math.round(seconds * 100) / 100;
+  return `${s} sec`;
+}
+
 const ZOOM_BRUSH_STYLE = { fill: 'rgba(0,119,190,0.15)', stroke: 'rgba(0,119,190,0.4)' };
 const ANNOTATE_BRUSH_STYLE = { fill: 'rgba(230,126,34,0.15)', stroke: 'rgba(230,126,34,0.5)' };
 
@@ -53,7 +63,7 @@ export function buildFocusContext(opts: FocusContextOptions): FocusContextHandle
   const focus = createChart({
     container: '#focus-chart',
     width: CHART_WIDTH,
-    height: 350,
+    height: 280,
     margin: { top: 20, bottom: 40, ...CHART_MARGIN_X },
     xScale: { type: 'linear', domain: timeExtent },
     yScale: { type: 'linear', domain: valueExtent, nice: true },
@@ -70,8 +80,8 @@ export function buildFocusContext(opts: FocusContextOptions): FocusContextHandle
   const context = createChart({
     container: '#context-chart',
     width: CHART_WIDTH,
-    height: 80,
-    margin: { top: 4, bottom: 20, ...CHART_MARGIN_X },
+    height: 80 + CONTEXT_LABEL_SPACE,
+    margin: { top: 4 + CONTEXT_LABEL_SPACE, bottom: 20, ...CHART_MARGIN_X },
     xScale: { type: 'linear', domain: timeExtent },
     yScale: { type: 'linear', domain: valueExtent },
     xAxis: { position: 'bottom', tickCount: 5 },
@@ -131,8 +141,8 @@ export function buildFocusContext(opts: FocusContextOptions): FocusContextHandle
     entered
       .append('text')
       .attr('fill', '#b5651d')
-      .attr('font-size', 11)
-      .attr('y', 12)
+      .style('font-size', 'var(--fs-xs)') // shared size (src/shell/tabs.css)
+      .attr('y', 14)
       .attr('pointer-events', 'none');
 
     const merged = entered.merge(sel);
@@ -148,15 +158,57 @@ export function buildFocusContext(opts: FocusContextOptions): FocusContextHandle
       .text((d) => d.label);
   }
 
+  // Window length over the overview's selection: ├── 60 sec ──┤ (just the number when narrow)
+  const windowLabel = contextLayers.overlay
+    .append('g')
+    .attr('class', 'window-length')
+    .attr('pointer-events', 'none');
+  const windowLineLeft = windowLabel.append('path');
+  const windowLineRight = windowLabel.append('path');
+  // style(), not attr(): SVG attributes can't read the shared CSS colour variables
+  windowLabel.selectAll('path').attr('fill', 'none').style('stroke', 'var(--text-2)').attr('stroke-width', 1);
+  const windowText = windowLabel
+    .append('text')
+    .attr('text-anchor', 'middle')
+    .style('fill', 'var(--text)')
+    .style('font-size', 'var(--fs-xs)') // shared size (src/shell/tabs.css)
+    .style('font-weight', '600');
+
+  function drawWindowLabel() {
+    const [d0, d1] = xDomainOf(focus);
+    const x = xScaleOf(context);
+    const x0 = x(d0);
+    const x1 = x(d1);
+    const yLine = -CONTEXT_LABEL_SPACE / 2 - 1;
+    const mid = (x0 + x1) / 2;
+    windowText.attr('x', mid).attr('y', yLine + 4).text(windowLengthLabel(d1 - d0));
+    const half = (windowText.node()?.getComputedTextLength() ?? 0) / 2 + 5;
+    const room = (x1 - x0) / 2 - half;
+    if (room < 6) {
+      // Too narrow for the bracket: number only
+      windowLineLeft.attr('d', null);
+      windowLineRight.attr('d', null);
+      return;
+    }
+    const cap = 4; // small end ticks pointing down at the window edges
+    windowLineLeft.attr('d', `M${x0},${yLine + cap}V${yLine}H${mid - half}`);
+    windowLineRight.attr('d', `M${mid + half},${yLine}H${x1}V${yLine + cap}`);
+  }
+
   function redrawFocus() {
     drawFocusLine();
     drawAnnotationBoxes();
+    drawWindowLabel(); // every change to the window goes through here
   }
 
   drawFocusLine();
   drawAnnotationBoxes();
   drawContextLine();
-  context.on('resize', drawContextLine);
+  drawWindowLabel();
+  context.on('resize', () => {
+    drawContextLine();
+    drawWindowLabel();
+  });
 
   let brush: BrushHandle | null = null;
 

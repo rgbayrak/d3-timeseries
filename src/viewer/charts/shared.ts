@@ -96,9 +96,9 @@ export function drawOnsetMarker(chart: ChartInstance, group: GroupSelection, wit
     group
       .append('text')
       .attr('x', x0 + 4)
-      .attr('y', 12)
+      .attr('y', 14)
       .attr('fill', '#7b3fa0')
-      .attr('font-size', 11)
+      .style('font-size', 'var(--fs-xs)') // shared size (src/shell/tabs.css)
       .attr('pointer-events', 'none')
       .text('scan onset (t = 0)');
   }

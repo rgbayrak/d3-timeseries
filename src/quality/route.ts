@@ -1,37 +1,31 @@
 import type { ScanKeyLike } from './metrics-tsv';
 
-// Hash routes for the quality page (the dataset is whatever the dev server serves):
-//   #group
-//   #subject?sub=01&ses=01&task=rest&run=01
+// Link to one scan on the Stats page (the dataset is whatever the dev server serves):
+//   /quality.html#scan?sub=01&ses=01&task=rest&run=01
+// Only the part after "?" is read, so older #subject?… links still open their scan.
 
-export type Route = { tab: 'group' } | { tab: 'subject'; scan: ScanKeyLike | null };
-
-export function parseRoute(hash: string): Route {
+/** The scan named in a quality.html hash, or null (Stats then opens the scan last shown in either tab) */
+export function parseScanHash(hash: string): ScanKeyLike | null {
   const h = hash.replace(/^#/, '');
   const q = h.indexOf('?');
-  const name = q === -1 ? h : h.slice(0, q);
-  const params = new URLSearchParams(q === -1 ? '' : h.slice(q + 1));
-
-  if (name === 'subject') {
-    const sub = params.get('sub');
-    const task = params.get('task');
-    const scan =
-      sub && task
-        ? { sub, ses: params.get('ses') ?? '', task, run: params.get('run') ?? '' }
-        : null;
-    return { tab: 'subject', scan };
-  }
-  return { tab: 'group' };
+  if (q === -1) return null;
+  const params = new URLSearchParams(h.slice(q + 1));
+  const sub = params.get('sub');
+  const task = params.get('task');
+  if (!sub || !task) return null;
+  return { sub, ses: params.get('ses') ?? '', task, run: params.get('run') ?? '' };
 }
 
-export function routeHash(route: Route): string {
+export function scanHash(scan: ScanKeyLike): string {
   const params = new URLSearchParams();
-  if (route.tab === 'subject' && route.scan) {
-    params.set('sub', route.scan.sub);
-    if (route.scan.ses) params.set('ses', route.scan.ses);
-    params.set('task', route.scan.task);
-    if (route.scan.run) params.set('run', route.scan.run);
-  }
-  const qs = params.toString();
-  return `#${route.tab}${qs ? `?${qs}` : ''}`;
+  params.set('sub', scan.sub);
+  if (scan.ses) params.set('ses', scan.ses);
+  params.set('task', scan.task);
+  if (scan.run) params.set('run', scan.run);
+  return `#scan?${params.toString()}`;
+}
+
+/** Address of the Stats page for one scan, e.g. for a double-click in Explore and Annotate */
+export function statsUrl(scan: ScanKeyLike): string {
+  return `/quality.html${scanHash(scan)}`;
 }

@@ -6,58 +6,67 @@
   <title>physAI-QA-interactive: quality metrics</title>
   <link rel="stylesheet" href="/src/shell/tabs.css" />
   <style>
-    /* Stats theme: purple and blue. Every colour on this page comes from one
-       coordinated family in src/quality/charts.ts (THEME, mirrored here, and
-       FAMILY, which feeds METRIC_GROUP_COLORS and the scatter PALETTE). Add new
-       colours from there, not new hues. Pass/fail badges keep green/amber/red.
-       Buttons and text are the exception: they use the neutral .btn style and
-       the text sizes and colours shared with Explore and Annotate
-       (src/shell/tabs.css), so text looks the same on every tab. */
+    /* Stats theme: purple and blue, for the tab stripe and the charts (THEME and
+       FAMILY in src/quality/charts.ts; add new colours from there, not new hues).
+       Text, dropdowns, buttons, links and badges come from src/shell/tabs.css,
+       so they look the same on every tab. */
     :root {
       --violet: #7b4fd0;
-      --violet-deep: #5b34ad;
-      --violet-soft: #f1ecfd;
-      --violet-hover: #e4dafb;
       --blue: #4a6cd4;
-      --blue-soft: #eaf0fd;
-      --ink: var(--text);
-      --ink-2: var(--text-2);
-      --ink-3: var(--text-3);
-      --line: #ddd8ee;
-      --grad: linear-gradient(90deg, var(--violet), var(--blue));
-      /* folder tabs (src/shell/tabs.css) */
-      --tab-accent: var(--grad);
-      --tab-active-ink: var(--violet-deep);
+      /* folder tab stripe (src/shell/tabs.css) */
+      --tab-accent: linear-gradient(90deg, var(--violet), var(--blue));
     }
 
     body {
       margin: 0;
       padding: 24px;
-      accent-color: var(--violet); /* checkboxes */
     }
 
-    /* Same width as Explore and Annotate, so the tabs and dataset header stay put */
+    /* Same width as Explore and Annotate (--page-width in tabs.css), so the tabs and dataset header stay put */
     .page {
-      max-width: 960px;
+      max-width: var(--page-width);
       margin: 0 auto;
     }
 
-    /* Sidebar (1/4) beside the graphs (3/4); stacked on narrow screens */
+    /* Left column (1/5) beside the graphs (4/5), in two rows:
+       row 1 = participant, recording, PDF report | Prev/Next, file name, waveforms,
+       row 2 = Metrics shown | metric tables and histograms, so the box starts level with them */
     .layout {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
-      gap: 24px;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 4fr); /* left column 1/5, graphs 4/5 */
+      column-gap: 24px;
       align-items: start;
     }
 
-    /* Raised so the open Metrics drop-down sits over the graphs */
+    .side-top { grid-column: 1; grid-row: 1; }
+    .main-top { grid-column: 2; grid-row: 1; }
+    .side-metrics { grid-column: 1; grid-row: 2; }
+    .main-metrics { grid-column: 2; grid-row: 2; }
+
+    /* Short divider closing row 1 in the graphs column, then row 2 starts level in both columns */
+    .main-top::after {
+      content: '';
+      display: block;
+      width: 48px;
+      height: 2px;
+      margin: 24px 0 0;
+      background: #c9c9d3;
+      border-radius: 1px;
+    }
+
+    .side-metrics,
+    .main-metrics {
+      margin-top: 18px;
+    }
+
     .sidebar {
-      position: relative;
-      z-index: 5;
+      font-size: var(--fs-md);
+    }
+
+    .side-top {
       display: flex;
       flex-direction: column;
       gap: 16px;
-      font-size: 13px;
     }
 
     /* Sidebar block titles use the shared .section-label lettering */
@@ -76,6 +85,33 @@
       border-radius: 1px;
     }
 
+    /* Boxed sidebar block (Metrics shown): same simple box as the Annotations box in Explore and Annotate */
+    .side-box {
+      box-sizing: border-box;
+      padding: 12px 14px 14px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+    }
+
+    /* Metrics shown: narrower than its 1/5 column, at the column's left edge,
+       leaving space between it and the graphs */
+    .side-metrics {
+      width: 85%;
+      justify-self: start;
+    }
+
+    @media (max-width: 760px) {
+      .side-metrics {
+        width: 100%; /* one column: full width */
+      }
+    }
+
+    /* Each row's first heading starts at the top of its row, level with the left column */
+    .main-top > h3:first-child,
+    .main-metrics > h3:first-child {
+      margin-top: 0;
+    }
+
     /* One key/value per line in the narrow column */
     .sidebar .kv-grid {
       flex-direction: column;
@@ -86,8 +122,8 @@
       overflow-wrap: anywhere;
     }
 
-    #pdf-btn {
-      margin-top: 8px;
+    .report-status {
+      overflow-wrap: anywhere;
     }
 
     .graphs {
@@ -99,27 +135,17 @@
       height: auto;
     }
 
+    /* Narrow screens: one column, each box right above the graphs it belongs with */
     @media (max-width: 760px) {
       .layout {
         grid-template-columns: minmax(0, 1fr);
       }
-    }
 
-    .controls label {
-      font-size: 14px;
-      display: flex;
-      align-items: center;
-      gap: 4px;
+      .side-top { grid-column: 1; grid-row: 1; }
+      .main-top { grid-column: 1; grid-row: 2; margin-top: 16px; }
+      .side-metrics { grid-column: 1; grid-row: 3; }
+      .main-metrics { grid-column: 1; grid-row: 4; }
     }
-
-    select:focus-visible,
-    button:focus-visible,
-    summary:focus-visible {
-      outline: 2px solid var(--blue);
-      outline-offset: 1px;
-    }
-
-    /* Buttons use the shared .btn style (src/shell/tabs.css) */
 
     .page .folder-tabs,
     .page .dataset-header {
@@ -129,7 +155,7 @@
     /* Metrics shown: listed in the sidebar; group names are fixed headings,
        each metric row has a plain checkmark on the right */
     .metric-picker {
-      font-size: 13px;
+      font-size: var(--fs-md);
     }
 
     .metric-picker-actions {
@@ -194,21 +220,13 @@
     }
 
     .metric-check:focus-visible {
-      outline: 2px solid var(--blue);
+      outline: 2px solid var(--link);
       outline-offset: 1px;
       border-radius: 3px;
     }
 
-    .pdf-option {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      font-size: 13px;
-      color: var(--ink-2);
-    }
-
     #status {
-      font-size: 13px;
+      font-size: var(--fs-md);
       color: #8a5a00;
       background: #fff4e5;
       border: 1px solid #f3d19e;
@@ -218,9 +236,9 @@
     }
 
     code {
-      font-size: 12px;
-      background: var(--violet-soft);
-      color: var(--violet-deep);
+      font: var(--fs-sm) var(--mono);
+      background: #f1f3f6;
+      color: var(--text);
       padding: 1px 5px;
       border-radius: 4px;
     }
@@ -244,45 +262,9 @@
       margin: 14px 0 6px;
     }
 
-    #scatter-note {
-      font-size: 12px;
-      color: var(--text-3);
-    }
-
-    .empty {
-      font-size: 13px;
-      color: var(--ink-3);
-      padding: 40px 0;
-      text-align: center;
-      background: var(--violet-soft);
-      border-radius: 10px;
-    }
-
-    /* Dataset overview (sidebar, Stats Group): the key facts bold and dark, the rest lighter */
-    .summary-text {
-      font-size: 13px;
-      line-height: 1.5;
-      color: var(--text-2);
-      margin: 0 0 8px;
-    }
-
-    .summary-text strong {
-      font-weight: 700;
-      color: var(--text);
-    }
-
-    /* Narrow column: let the table scroll and its headers wrap */
-    .summary-wrap {
-      overflow-x: auto;
-    }
-
-    .sidebar .summary-table th {
-      white-space: normal;
-    }
-
     table {
       border-collapse: collapse;
-      font-size: 12px;
+      font-size: var(--fs-sm);
       margin-top: 6px;
     }
 
@@ -296,20 +278,19 @@
 
     th {
       background: #f5f5f5;
-      color: var(--ink);
+      color: var(--text);
       font-weight: 600;
       text-align: left;
     }
 
     th[title] {
       cursor: help;
-      text-decoration: underline dotted var(--ink-3);
+      text-decoration: underline dotted var(--text-3);
       text-underline-offset: 3px;
     }
 
-    .summary-table td:not(:first-child),
     .metrics-table td:not(:first-child) {
-      font-family: monospace;
+      font-family: var(--mono);
       text-align: right;
     }
 
@@ -317,7 +298,7 @@
       overflow-x: auto;
     }
 
-    /* Stats Individual, per channel: heading, table, note, histograms, with room between them */
+    /* Per channel: heading, table, note, histograms, with room between them */
     #subject-metrics section + section {
       margin-top: 28px;
     }
@@ -332,26 +313,8 @@
 
     .metrics-table .pct {
       display: block;
-      font-size: 10px;
-      color: var(--ink-3);
-    }
-
-    .failed-scans {
-      font-size: 12px;
-      margin-top: 8px;
-      color: #a33;
-    }
-
-    .controls {
-      display: flex;
-      gap: 16px;
-      flex-wrap: wrap;
-      align-items: center;
-      margin: 8px 0;
-    }
-
-    #scatter-chart {
-      width: 100%;
+      font-size: var(--fs-xs);
+      color: var(--text-3);
     }
 
     .axis path,
@@ -367,28 +330,6 @@
       display: none;
     }
 
-    #scatter-legend {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      font-size: 12px;
-      margin: 4px 0;
-    }
-
-    .legend-item {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    /* Legend swatch: same colours as the scatter dots */
-    .swatch {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      display: inline-block;
-    }
-
     .hist-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
@@ -396,11 +337,10 @@
     }
 
     .hist-empty {
-      font-size: 12px;
-      color: var(--ink-3);
+      font-size: var(--fs-sm);
+      color: var(--text-3);
     }
 
-    /* Individual tab */
     .scan-picker {
       display: flex;
       gap: 8px;
@@ -411,20 +351,18 @@
 
     .open-viewer {
       margin-left: auto;
-      font-size: 13px;
-      color: var(--blue);
+      font-size: var(--fs-md);
     }
-
 
     .kv-grid {
       display: flex;
       flex-wrap: wrap;
       gap: 6px 18px;
-      font-size: 13px;
+      font-size: var(--fs-md);
     }
 
     .kv .k {
-      color: var(--ink-3);
+      color: var(--text-3);
       margin-right: 4px;
     }
 
@@ -439,34 +377,6 @@
       margin-top: 8px;
     }
 
-    .quality-badge {
-      font-size: 12px;
-      padding: 2px 8px;
-      border-radius: 10px;
-      font-weight: 600;
-    }
-
-    .quality-badge.pass,
-    .quality-badge.timing-verified {
-      background: #e6f4ea;
-      color: #1e7e34;
-      border: 1px solid #b7e1c4;
-    }
-
-    .quality-badge.fail,
-    .quality-badge.timing-mismatch {
-      background: #fce8e6;
-      color: #c62828;
-      border: 1px solid #f5b7b1;
-    }
-
-    .quality-badge.timing-corrected,
-    .quality-badge.timing-unverified {
-      background: #fff4e5;
-      color: #8a5a00;
-      border: 1px solid #f3d19e;
-    }
-
     .waveform-chart {
       margin-bottom: 2px;
     }
@@ -477,79 +387,57 @@
   <div class="page">
     <nav class="folder-tabs" aria-label="Sections">
       <a class="folder-tab" href="/">Explore and Annotate</a>
-      <button id="tab-group" class="folder-tab active" type="button">Stats Group</button>
-      <button id="tab-subject" class="folder-tab" type="button">Stats Individual</button>
+      <a class="folder-tab active" href="/quality.html" aria-current="page">Stats</a>
     </nav>
     <div id="dataset-info" class="dataset-header"></div>
 
-    <!-- Under the dataset header: sidebar (1/4) with settings and scan info, graphs (3/4) -->
-    <div class="layout">
-      <aside class="sidebar" aria-label="Settings and scan information">
-        <!-- Stats Group only -->
-        <div id="side-overview" class="side-block">
-          <div class="section-label">Dataset overview</div>
-          <div id="group-summary"></div>
-        </div>
+    <div id="status" style="display:none"></div>
 
-        <div id="side-subject" class="side-block" style="display:none">
+    <!-- Under the dataset header, a grid of two rows: left column 1/5, graphs 4/5.
+         Row 1: participant and recording info, PDF report | Prev/Next, file name, waveforms.
+         Row 2: Metrics shown box | the metric tables and histograms it controls, so both start level. -->
+    <div class="layout">
+      <aside class="sidebar side-top" aria-label="Scan information">
+        <div class="side-block">
           <div class="section-label">Participant info</div>
           <div id="subject-participant"></div>
         </div>
 
-        <div id="side-scan" class="side-block" style="display:none">
+        <div class="side-block">
           <div class="section-label">Recording details</div>
           <div id="subject-scan"></div>
         </div>
 
+        <!-- Built and saved once per computed dataset (src/quality/main.ts) -->
         <div class="side-block">
-          <div class="section-label">Download</div>
-          <label class="pdf-option" title="Add one page per scan with its waveforms and metrics"><input id="pdf-scans" type="checkbox" checked> Include each scan</label>
-          <button id="pdf-btn" class="btn" type="button" title="Download a PDF with every plot for this dataset: summary, each channel's scatter plot and distributions, and (optionally) one page per scan">Download PDF</button>
-        </div>
-
-        <div class="side-block">
-          <div class="section-label">Metrics shown</div>
-          <div id="metric-picker"></div>
+          <div class="section-label">PDF report</div>
+          <div id="report-status" class="report-status muted"></div>
         </div>
       </aside>
 
-      <main class="graphs">
-    <div id="status" style="display:none"></div>
+      <!-- Level with the metrics (row 2) -->
+      <aside class="sidebar side-box side-metrics" aria-label="Metrics shown">
+        <div class="section-label">Metrics shown</div>
+        <div id="metric-picker"></div>
+      </aside>
 
-    <section id="group-tab">
-      <h3>Compare two metrics across all recordings</h3>
-      <div class="controls">
-        <label>Channel <select id="channel-select"></select></label>
-        <label>Y <select id="y-select"></select></label>
-        <label>X <select id="x-select"></select></label>
-        <label>Colour by <select id="color-select"></select></label>
-      </div>
-      <div class="muted">One point per recording of the selected channel. X can also be a participant variable (age, sex, …) from participants.tsv. Hover a point for details; double-click it to open that scan in the Stats Individual tab.</div>
-      <div id="scatter-chart"></div>
-      <div id="scatter-legend"></div>
-      <div id="scatter-note"></div>
-
-      <h3 id="group-hist-title">How each metric is distributed</h3>
-      <div class="muted">Dashed grey line: group mean. Hover a histogram for what the metric measures.</div>
-      <div id="group-histograms" class="hist-grid"></div>
-    </section>
-
-    <section id="subject-tab" style="display:none">
+      <div class="graphs main-top">
       <div class="scan-picker">
         <button id="scan-prev" class="btn" type="button">&laquo; Prev</button>
         <button id="scan-next" class="btn" type="button">Next &raquo;</button>
-        <a class="open-viewer" href="/" title="Explore and Annotate opens on the scan shown here">Open this scan in Explore and Annotate &rarr;</a>
+        <a id="open-viewer" class="open-viewer" href="/" title="Explore and Annotate opens on the scan shown here">Open this scan in Explore and Annotate &rarr;</a>
       </div>
       <div class="now-viewing"><span class="now-viewing-label">Now viewing:</span> <span id="subject-filename" class="now-viewing-file"></span></div>
 
       <h3>Signals over the whole recording</h3>
       <div id="subject-waveforms"></div>
+      </div>
 
+      <div class="graphs main-metrics">
       <h3>Quality metrics for this scan</h3>
       <div class="muted">Each value's percentile is among all recordings of the same channel in this dataset.</div>
       <div id="subject-metrics"></div>
-    </section>
-      </main>
+      </div>
     </div>
   </div>
   <script type="module" src="/src/quality/main.ts"></script>

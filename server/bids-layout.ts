@@ -573,17 +573,23 @@ export function isAnnotated(file: AnnotationsFile | null): boolean {
   );
 }
 
-/** How many of the given scans are annotated for one channel ("24/80 annotated") */
-export function annotationProgress(
+/**
+ * How many of the given scans are annotated for one channel ("24/80 annotated"),
+ * and the first one that is not, in the scans' order (hierarchy order), so
+ * Explore and Annotate can open it: a skipped scan is never forgotten.
+ */
+export function annotationProgress<S extends { sub: string; ses: string; task: string; run: string }>(
   root: string,
-  scans: { sub: string; ses: string; task: string; run: string }[],
+  scans: S[],
   channel: string,
-): { annotated: number; total: number } {
+): { annotated: number; total: number; firstUnannotated: S | null } {
   let annotated = 0;
+  let firstUnannotated: S | null = null;
   for (const s of scans) {
     if (isAnnotated(readAnnotations(root, s.sub, s.ses, s.task, s.run, channel))) annotated++;
+    else firstUnannotated ??= s;
   }
-  return { annotated, total: scans.length };
+  return { annotated, total: scans.length, firstUnannotated };
 }
 
 export function writeAnnotations(root: string, payload: AnnotationsFile): void {

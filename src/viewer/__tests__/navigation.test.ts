@@ -1,9 +1,34 @@
 import { describe, it, expect } from 'vitest';
-import { stepScan, resolveSearch, isScanStepKey } from '../navigation';
-import { validStacked, toggleStacked } from '../controls';
+import { stepScan, resolveSearch, isScanStepKey, pickStartScan } from '../navigation';
+import { validStacked, toggleStacked, physioColumns } from '../controls';
+
+describe('physioColumns', () => {
+  it('offers only physiological channels, never trigger', () => {
+    expect(physioColumns(['cardiac', 'respiratory', 'trigger'])).toEqual(['cardiac', 'respiratory']);
+  });
+
+  it('falls back to every column when none is in the dictionary', () => {
+    expect(physioColumns(['foo', 'bar'])).toEqual(['foo', 'bar']);
+  });
+});
 
 const s = (sub: string, ses: string, run = '01') => ({ sub, ses, task: 'rest', run });
 const scans = [s('01', '01'), s('01', '02'), s('02', '01'), s('02', '02')];
+
+describe('pickStartScan', () => {
+  it('opens a linked scan first, then the earliest unannotated, then the last viewed, then the first', () => {
+    const all = { linked: scans[3], firstUnannotated: scans[1], lastViewed: scans[2] };
+    expect(pickStartScan(scans, all)).toEqual(scans[3]);
+    expect(pickStartScan(scans, { ...all, linked: null })).toEqual(scans[1]);
+    expect(pickStartScan(scans, { lastViewed: scans[2], firstUnannotated: null })).toEqual(scans[2]);
+    expect(pickStartScan(scans, {})).toEqual(scans[0]);
+  });
+
+  it('skips candidates that are not in the dataset', () => {
+    expect(pickStartScan(scans, { linked: s('99', '01'), firstUnannotated: scans[1] })).toEqual(scans[1]);
+    expect(pickStartScan([], {})).toBeUndefined();
+  });
+});
 
 describe('stepScan', () => {
   it('steps forward and back in hierarchy order', () => {

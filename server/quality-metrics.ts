@@ -19,6 +19,7 @@ import {
   METRICS_TSV_NAME,
   DATASET_JSON_NAME,
   WAVEFORMS_DIR,
+  REPORT_PDF_NAME,
   rowsToTsv,
   scanId,
 } from '../src/quality/metrics-tsv';
@@ -249,6 +250,8 @@ export function runQualityMetrics(opts: QualityRunOptions): QualityRunResult {
   // The waveforms folder is ours alone; clear it so scans that disappeared leave no stale files
   rmSync(waveDir, { recursive: true, force: true });
   mkdirSync(waveDir, { recursive: true });
+  // The PDF report describes the old metrics: remove it, Stats builds and saves a new one when it next opens
+  rmSync(join(outDir, REPORT_PDF_NAME), { force: true });
 
   const subjects = getSubjects(paths.bidsRoot);
   const scans = buildScans(paths.bidsRoot, subjects);

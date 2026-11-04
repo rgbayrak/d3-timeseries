@@ -122,7 +122,14 @@ export interface ScatterOptions<T> {
   /** Fixed size (used for off-screen rendering); default fills the container */
   width?: number;
   height?: number;
+  /** Points to emphasise (e.g. the scan open in Explore and Annotate): larger, pinkish red, drawn on top */
+  highlight?: (p: ScatterPoint<T>) => boolean;
 }
+
+/** Colour of a highlighted scatter point */
+export const HIGHLIGHT_COLOR = '#e8436f';
+const DOT_R = 4.5;
+const HIGHLIGHT_R = 8;
 
 /** Interactive scatter: hover for details, double-click a point to open it */
 export function drawScatter<T>(opts: ScatterOptions<T>): ChartInstance {
@@ -155,14 +162,18 @@ export function drawScatter<T>(opts: ScatterOptions<T>): ChartInstance {
   if (fixed) scaleToFit(chart);
 
   const layers = chart.getLayers();
+  const isHighlighted = (p: ScatterPoint<T>) => opts.highlight?.(p) ?? false;
+  const radius = (p: ScatterPoint<T>) => (isHighlighted(p) ? HIGHLIGHT_R : DOT_R);
+  // Highlighted points last, so they are drawn on top
+  const ordered = [...opts.points].sort((a, b) => Number(isHighlighted(a)) - Number(isHighlighted(b)));
   // Points go in the overlay so they sit above the grid and get pointer events
   const dots = layers.overlay
     .selectAll<SVGCircleElement, ScatterPoint<T>>('circle')
-    .data(opts.points)
+    .data(ordered)
     .join('circle')
-    .attr('r', 4.5)
-    .attr('fill', (p) => p.color)
-    .attr('fill-opacity', 0.9)
+    .attr('r', radius)
+    .attr('fill', (p) => (isHighlighted(p) ? HIGHLIGHT_COLOR : p.color))
+    .attr('fill-opacity', (p) => (isHighlighted(p) ? 1 : 0.9))
     .attr('stroke', DOT_RING)
     .attr('stroke-width', 1.5)
     .attr('cursor', 'pointer');
@@ -181,13 +192,13 @@ export function drawScatter<T>(opts: ScatterOptions<T>): ChartInstance {
   }
   dots
     .on('mouseenter', function (event: MouseEvent, p) {
-      (this as SVGCircleElement).setAttribute('r', '7');
+      (this as SVGCircleElement).setAttribute('r', String(radius(p) + 2.5));
       (this as SVGCircleElement).setAttribute('stroke', THEME.ink);
       chart.getTooltip()?.show(tooltip(p), event.pageX, event.pageY);
     })
     .on('mousemove', (event: MouseEvent) => chart.getTooltip()?.move(event.pageX, event.pageY))
-    .on('mouseleave', function () {
-      (this as SVGCircleElement).setAttribute('r', '4.5');
+    .on('mouseleave', function (_event: MouseEvent, p) {
+      (this as SVGCircleElement).setAttribute('r', String(radius(p)));
       (this as SVGCircleElement).setAttribute('stroke', DOT_RING);
       chart.getTooltip()?.hide();
     })

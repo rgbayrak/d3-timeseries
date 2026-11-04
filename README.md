@@ -44,20 +44,21 @@ npx vite-node scripts/compute-quality-metrics.ts ds006644
 
 The app loads a BIDS physiology dataset and presents an interactive viewer with:
 
-- **Controls** — four rows: Subject, Session, Task, Run (when present), Channel and Confound (when derivatives exist) dropdowns; Stack checkboxes for extra channels; Prev/Next buttons (or ←/→ keys) to step through scans in hierarchy order plus a search bar accepting `sub-03` or `ses-012` style input; Annotate button
+- **Controls** — three rows: Subject, Session, Task, Run (when present) and Channel dropdowns; an **Auxiliary Signal Options** row with the Confound dropdown (when derivatives exist) and Stack checkboxes for extra channels, for the Auxiliary charts below (Channel and Stack offer only physiological channels, matched against the same dictionary as the quality metrics, so `trigger` is left out); Prev/Next buttons (or ←/→ keys) to step through scans in hierarchy order plus a search bar accepting `sub-03` or `ses-012` style input. The Annotate: On/Off button is in the Annotations box, under Time Windows
 - **Dataset info** — name, authors, BIDS version, license, DOI link and derivatives pipeline/version, read from the dataset's own `dataset_description.json` (raw and derivatives); fields that are missing are skipped
 - **Filename display** — shows the exact `.tsv.gz` file being viewed
-- **Badges** — a timing badge (see [Timing alignment](#timing-alignment)) and per-channel pass/fail quality indicators when a `_desc-quality.json` sidecar is present (run-level, e.g. `*_run-01_desc-quality.json`, or run-less)
+- **Badges** — next to the file name: a timing badge (see [Timing alignment](#timing-alignment)) and per-channel pass/fail quality indicators when a `_desc-quality.json` sidecar is present (run-level, e.g. `*_run-01_desc-quality.json`, or run-less)
 - **Focus chart** (top) — drag to brush-select a time window (zooms on release), double-click to reset, auto-fits Y-axis to visible data; hover for data readout
 - **Context chart** (bottom) — drag the brush to navigate; handles resize the viewport
 - **Stacked channels** — tick channels in the Stack row to add a compact figure for each, stacked below the annotations; they follow the focus chart's time window (zoom, brush, double-click reset), auto-fit their Y-axis to visible data, and have their own hover readout
 - **Confounds chart** — pick a motion confound from the Confound dropdown (shown only when fMRIPrep derivatives exist); FD is color-coded by severity (green/amber/red) with 0.2 mm and 0.5 mm reference lines
-- **Channel persistence** — selected channel and stacked channels are preserved when stepping through scans with Prev/Next; a reload resumes the last-viewed scan, channel, stacked channels and confound (saved per dataset in the browser's localStorage)
+- **Channel persistence** — selected channel and stacked channels are preserved when stepping through scans with Prev/Next; a reload keeps the channel, stacked channels and confound (saved per dataset in the browser's localStorage)
+- **Where it opens** — on the earliest scan (subject, session, task, run order) with nothing annotated yet for the remembered channel, so a skipped scan always comes back; once every scan is annotated, on the last-viewed scan. A link from Stats (`/#scan?sub=…`) opens that scan instead
 - **Annotations** box — *Full Recording*: rate the Signal Quality (Good, Bad, Fixable, Unknown) and write Notes; *Time Windows*: toggle Annotate mode, drag on the focus chart to mark and label a time window. Everything is saved to disk per `{sub, ses, task, run, channel}` (signal quality and notes first in the file) and reloads automatically when you return to that scan
 
 ## Dataset quality metrics
 
-The app has three folder tabs at the top: **Explore and Annotate** (the viewer above, `/`), **Stats Group** and **Stats Individual** (`/quality.html`). The two Stats tabs compare signal quality metrics across every scan of a dataset.
+The app has two folder tabs at the top: **Explore and Annotate** (the viewer above, `/`) and **Stats** (`/quality.html`). Once a dataset's signal quality metrics are computed, Explore and Annotate also shows a scatter plot comparing them across every scan, and the Stats tab appears. Without them, both stay hidden.
 
 **1. Compute the metrics** (once per dataset, and again after the data or the metrics change):
 
@@ -74,12 +75,12 @@ The script runs the per-channel signal quality metrics (`src/data/sqi-metrics.ts
 
 Only physiological channels are computed. Column names are checked against a dictionary (`src/quality/channels.ts`; e.g. `cardiac`, `PPG`, `ECG`, `respiratory`, `RSP`, `EDA`); `trigger` and unknown columns are skipped. Datasets with the raw data in `physprep/` next to `fmriprep/` (e.g. CNeuroMod) are detected automatically. Output is deterministic: the same input gives byte-identical files.
 
-**2. Open the Stats Group tab.** All three tabs show the dataset the dev server is serving (`BIDS_ROOT`, see [Using your own dataset](#using-your-own-dataset)). The scan open in Explore and Annotate is the one Stats Individual opens, and the other way round.
+**2. Reload the page.** Both tabs show the dataset the dev server is serving (`BIDS_ROOT`, see [Using your own dataset](#using-your-own-dataset)). The scan open in Explore and Annotate is the one Stats opens, and the other way round.
 
-- **Stats Group:** dataset info and a short summary, an interactive scatter plot (pick channel, Y, X and colouring; Y is a metric, X can be a metric or a participant variable such as age or sex), and the distribution of every metric. Hover a point for details; double-click it to open that scan.
-- **Stats Individual:** file name, dataset and participant info, scan details, the waveform of each physiological channel, and each metric with its percentile and position in the group histogram.
-- **Download PDF:** builds a PDF of every plot for the dataset (summary, each channel's scatter plot and distributions, and optionally one page per scan) and downloads it.
-- **Metrics shown** (sidebar): tick which metrics to show, listed under their groups (Basic, Distribution, PaPaGei, PhysioQC), or use Show all / Hide all. Hidden metrics leave the X/Y menus, histograms, the Stats Individual table and the PDF. The choice is remembered in your browser.
+- **Scatter plot** (bottom of Explore and Annotate): shows the channel chosen in the page's one Channel dropdown, the same as the charts above it; pick Y, X and colouring. Y is a metric, X can be a metric or a participant variable such as age or sex. The menus list every metric in `quality_metrics.tsv` that has values for that channel; a channel without metrics (e.g. `trigger`) gets a short message instead of a plot. Colour by offers only what the dataset has (task, session, timing check, sidecar pass/fail). The scan you are viewing is the larger pinkish-red point. Hover a point for details; double-click it to open that scan in Stats.
+- **Stats:** one scan at a time (Prev/Next): file name, participant info, recording details, the waveform of each physiological channel, and per channel a table of its metrics with percentiles, followed by where the scan sits in each metric's histogram.
+- **Metrics shown** (Stats): tick which metrics the tables and histograms show, listed under their groups (Basic, Distribution, PaPaGei, PhysioQC), or use Show all / Hide all. The choice is remembered in your browser.
+- **PDF report:** `data/quality/<dataset>/quality_report.pdf`, with a summary, each channel's scatter plot and one page per scan with its waveforms and every metric. Computing the metrics deletes the old report; the next time Stats opens it builds a new one in the background and the dev server saves it there. The Stats sidebar shows its progress and then a link to open it.
 
 What each metric computes, and its source, is described in [REVIEW.md](REVIEW.md).
 

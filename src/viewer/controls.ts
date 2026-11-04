@@ -1,4 +1,16 @@
 import { fetchTasks, fetchRuns } from '@/data/bids-physio-reader';
+import { isPhysioChannel } from '@/quality/channels';
+
+/**
+ * Columns of a physio file to offer as channels: only physiological signals,
+ * matched against the same dictionary the quality metrics script uses
+ * (src/quality/channels.ts), so trigger and other non-physio columns are left
+ * out. If none match, every column is offered so the viewer still shows something.
+ */
+export function physioColumns(columns: string[]): string[] {
+  const physio = columns.filter(isPhysioChannel);
+  return physio.length > 0 ? physio : columns;
+}
 
 export function populateSelect(el: HTMLSelectElement, values: string[], selected?: string): void {
   el.innerHTML = '';
@@ -74,7 +86,10 @@ export function renderStackControls(
     cb.type = 'checkbox';
     cb.checked = stacked.includes(ch);
     cb.addEventListener('change', () => onToggle(ch, cb.checked));
-    label.append(cb, ch);
+    const name = document.createElement('span');
+    name.className = 'channel-name'; // channel names look like code, as file names do
+    name.textContent = ch;
+    label.append(cb, name);
     els.stackChannels.appendChild(label);
   }
 }

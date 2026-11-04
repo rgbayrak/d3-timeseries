@@ -1,5 +1,6 @@
 // Compute quality metrics for every scan of a dataset and write them to
-// data/quality/<dataset>/ (quality_metrics.tsv, dataset.json, waveforms/).
+// data/quality/<dataset>/ (quality_metrics.tsv, dataset.json, waveforms/). The
+// PDF report (quality_report.pdf) is saved there by the Stats tab when it next opens.
 //
 //   npx vite-node scripts/compute-quality-metrics.ts -- <dataset> [options]
 //
@@ -51,6 +52,9 @@ try {
   console.log(
     `Done in ${((Date.now() - started) / 1000).toFixed(1)} s: ${nScans} scans, ${nSubjects} subjects` +
       (failedScans.length ? `, ${failedScans.length} failed (listed in dataset.json)` : ''),
+  );
+  console.log(
+    'The PDF report (quality_report.pdf) is built and saved next to these files the next time the Stats tab opens (npm run dev).',
   );
 } catch (err) {
   console.error(err instanceof Error ? err.message : err);

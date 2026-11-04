@@ -55,7 +55,7 @@ src/
 │   ├── state.ts               # The single ViewerState object
 │   ├── annotations.ts         # Annotation model <-> stored JSON (pure)
 │   ├── annotation-panel.ts    # Annotation list rendering, HTML escaping
-│   ├── sqi-table.ts           # Metric labels, groups and number format (used by the Stats tabs)
+│   ├── sqi-table.ts           # Metric labels, groups and number format (used by the scatter plot, Stats and the PDF)
 │   ├── info.ts                # Dataset info line, timing/quality badges
 │   ├── controls.ts            # Dropdowns, stacked-channel checkboxes
 │   ├── navigation.ts          # Prev/next stepping, search resolution (pure)
@@ -65,10 +65,10 @@ src/
 │       ├── focus-context.ts   # Focus + overview charts, brush-to-zoom, annotation boxes
 │       ├── confounds.ts       # Confound chart, FD severity coloring
 │       └── stack.ts           # Stacked channel charts
-├── quality/                   # Dataset quality metrics page (quality.html; only main.ts touches the page)
-│   ├── main.ts                # Entry: hash route, dataset loading, PDF button
-│   ├── group-tab.ts           # Summary, scatter plot (X: metric or participant; Y: metric), distributions
-│   ├── individual-tab.ts      # One scan: header, waveforms, metrics, group histograms
+├── quality/                   # Quality metrics: the Stats tab (quality.html; only main.ts touches that page) and the scatter plot in Explore and Annotate
+│   ├── main.ts                # Stats entry: #scan?… link, dataset loading, builds and saves the PDF report once
+│   ├── individual-tab.ts      # Stats: one scan's header, waveforms, per-channel metric tables and histograms
+│   ├── scatter-panel.ts       # Scatter plot for Explore and Annotate (X: metric or participant; Y: metric; viewed scan highlighted)
 │   ├── report.ts              # PDF report: lays out pages on a canvas, rasterises the charts
 │   ├── pdf.ts                 # Minimal PDF writer (one JPEG per page, pure)
 │   ├── charts.ts              # Scatter, histogram and static waveform charts (createChart)
@@ -77,12 +77,12 @@ src/
 │   ├── channels.ts            # Physio channel dictionary (pure)
 │   ├── envelope.ts            # Min/max downsampling for waveforms (pure)
 │   ├── stats.ts               # Histogram bins, percentiles (pure)
-│   ├── route.ts               # #group / #subject?… links (pure)
+│   ├── route.ts               # /quality.html#scan?sub=… links (pure)
 │   ├── metric-picker.ts       # "Metrics shown" sidebar list: show/hide each metric
 │   ├── linked-scan.ts         # Shares the open scan with Explore and Annotate (via its localStorage entry)
 │   └── data.ts                # Fetches the served dataset's data/quality/ files
 ├── shell/
-│   └── tabs.css               # Folder tabs shared by index.html and quality.html
+│   └── tabs.css               # Page shell shared by index.html and quality.html: folder tabs, dataset header, text styles, .btn, "Now viewing" line
 ├── utils/
 │   ├── uid.ts              # Unique ID generator
 │   ├── margin.ts           # Margin defaults/merge
@@ -129,10 +129,10 @@ BIDS dataset on disk
   ↓  readPhysio() for every scan, keep physiological columns (src/quality/channels.ts), computeSQI()
   ↓  writes data/quality/<dataset>/quality_metrics.tsv, dataset.json, waveforms/*.json
   ↓
-Browser (quality.html, src/quality/)
+Browser (src/quality/)
   ↓  asks /api/bids/dataset which dataset the server serves (its `id`), then
   ↓  fetches /data/quality/<id>/… directly (served by Vite from the project root)
-  ↓  Stats Group tab, Stats Individual tab, PDF report
+  ↓  scatter plot in Explore and Annotate (index.html), Stats tab and PDF report (quality.html)
 ```
 
 ### Server API endpoints
@@ -148,12 +148,15 @@ Browser (quality.html, src/quality/)
 | `GET /api/bids/confounds?sub=&ses=&task=&run=` | Motion confounds (FD, RMSD, DVARS, trans/rot) from fMRIPrep confounds TSV |
 | `GET /api/bids/annotations?sub=&ses=&task=&run=&channel=` | Stored annotations for a scan/channel, if any |
 | `POST /api/bids/annotations` | Saves (overwrites) annotations for a scan/channel |
+| `GET /api/quality-report` | `{ exists, url }`: whether the served dataset's `data/quality/<dataset>/quality_report.pdf` is saved |
+| `POST /api/quality-report` | Saves the PDF report the Stats tab built (body: the PDF; only for the served dataset, only once its metrics exist) |
+| `GET /api/bids/annotation-progress?channel=` | `{ annotated, total, firstUnannotated }`: scans with a Signal Quality rating, Notes or a time window saved for that channel, and the earliest scan (hierarchy order) without any, or `null` |
 
 The server skips broken symlinks (e.g. DataLad/git-annex files that haven't been fetched) using `accessSync(R_OK)`.
 
 Confounds are read from the derivatives root (`BIDSDER_ROOT` env var, default `$BIDS_ROOT/derivatives/fmriprep`). The server looks for `*_desc-confounds_timeseries.tsv[.gz]` and extracts the motion columns (`framewise_displacement`, `rmsd`, `dvars`, `std_dvars`, `trans_*`, `rot_*`); the **Confound** dropdown picks which one to plot and only appears when a confounds file is found.
 
-Annotations are written as JSON files under `ANNOTATIONS_ROOT` (env var, default `data/annotations/` in the project root), one file per `{sub, ses, task, run, channel}`, mirroring the `sub-XX/ses-XX/` BIDS directory structure.
+Annotations are written as JSON files under `ANNOTATIONS_ROOT` (env var, default `data/annotations/` in the project root), one file per `{sub, ses, task, run, channel}`, mirroring the `sub-XX/ses-XX/` BIDS directory structure. Each file starts with the full-recording `waveform_quality` (`good`, `bad`, `fixable`, `unknown` or `null`) and `waveform_comment` (Notes), followed by the scan, `sampling_rate` and the time windows in `annotations`. Files saved before these two fields existed still load.
 
 How the server and viewer line up physio, confounds and triggers in time is described in the README under [Timing alignment](README.md#timing-alignment).
 
@@ -165,6 +168,7 @@ How the server and viewer line up physio, confounds and triggers in time is desc
 - **Functional factory pattern** — no classes, composable, idiomatic D3.
 - **No component framework (Vue/React)** — vanilla D3+TS holds up as long as state stays centralized (a single object for current scan/selection/annotations) and render functions stay pure/redraw-from-state. Revisit only if hand-rolled DOM diff/patch logic becomes unavoidable, not because of codebase size alone.
 - **Viewer modules don't reach into the page** — only `src/viewer/main.ts` looks up elements and owns the `ViewerState`; every other viewer module receives elements and data as arguments and has no import-time DOM access, so its logic is unit-tested in Node (`src/viewer/__tests__/`). The quality page follows the same rule: only `src/quality/main.ts` touches `quality.html`, and the pure modules are tested in `src/quality/__tests__/`.
+- **One text style everywhere** — every change keeps text font, size and colour matched across pages. Use only the shared tokens in `src/shell/tabs.css` (`--fs-xl` … `--fs-xs`, `--text`, `--text-2`, `--text-3`, `--mono`), never a page-specific font size, family or text colour. Within a section, text under its heading (description, labels, dropdowns, legend, notes) is one size and one colour. File and channel names use the shared code style (`.now-viewing-file`, `.channel-name`).
 
 ---
 
@@ -173,13 +177,13 @@ How the server and viewer line up physio, confounds and triggers in time is desc
 A metric is computed in one place and listed in three:
 
 1. **Compute it** in `computeChannelMetrics()` (`src/data/sqi-metrics.ts`) and add the field to the `ChannelMetrics` interface. Return `NaN` when it does not apply to a channel.
-2. **Label it** in `SQI_COLUMNS` (`src/viewer/sqi-table.ts`): label, decimals, description and group. The Stats tabs and their PDF use these labels.
+2. **Label it** in `SQI_COLUMNS` (`src/viewer/sqi-table.ts`): label, decimals, description and group. The scatter plot, the Stats tab and the PDF use these labels.
 3. **Give it a TSV column** in `METRIC_COLUMNS` (`src/quality/metrics-tsv.ts`), in snake_case. The column order there is the TSV column order.
 4. **Document it** in [REVIEW.md](REVIEW.md): what it computes, which channels it applies to, and its citation.
 5. **Test it** in `src/data/__tests__/sqi-metrics.test.ts` with a synthetic signal of known value.
 6. **Rerun the script** for every dataset. `parseQualityTsv` refuses a TSV that lacks a column listed in `METRIC_COLUMNS`, so old outputs stop loading until they are recomputed.
 
-To remove a metric, delete it from the same places. The quality page builds its scatter axes and histograms from the metrics that have values in the TSV for each channel, so no plot code changes are needed either way.
+To remove a metric, delete it from the same places. The scatter plot and the Stats tab build their axes, tables and histograms from the metrics that have values in the TSV for each channel, so no plot code changes are needed either way.
 
 To accept a new physio column name (e.g. a vendor-specific label), add it to `PHYSIO_CHANNELS` in `src/quality/channels.ts` with its signal type. Names are matched without case, separators or a trailing number. Columns that are not physiological belong in `NON_PHYSIO_CHANNELS`.
 
@@ -386,11 +390,13 @@ Research features and improvements. Publication readiness (license, packaging, d
   - Annotator registry in a PostgreSQL table (e.g. `annotators(id SERIAL, name TEXT UNIQUE, last_dataset, last_sub, last_ses, last_task, last_run, last_channel, updated_at)`); each annotator is assigned a number
   - Annotator enters their name on start → look up (or create) their row → viewer resumes at their last-viewed scan (replaces the current localStorage resume)
   - One annotation file per annotator, keyed by their number, e.g. `data/annotations/<dataset>/sub-XX/[ses-YY/]func/..._channel-C_annotator-NN_annotations.json`, with `annotator` stored in the JSON payload
-- [x] Block unsafe file paths in the annotations endpoint — `validateScanKey` in `server/bids-layout.ts` rejects non-alphanumeric BIDS labels and channel names with path characters; every endpoint returns 400, and `annotationsFilePath` refuses them too
-- [ ] Stop annotation saves from overwriting each other — every add/remove POSTs the whole file (`persistAnnotations`) with no queueing or debounce, so two fast edits can land out of order and the older one wins
+- [ ] Stop annotation saves from overwriting each other — every change (time window added/removed, Signal Quality clicked, Notes typed) POSTs the whole file (`persistAnnotations`) with no queue, so two fast edits can land out of order and the older one wins. Notes are already debounced; ratings and windows are not
 - [ ] Edit existing annotations — rename the label and drag the edges to adjust the range (currently add/delete only)
 - [ ] Fixed label list — replace the free-text `window.prompt` with a set vocabulary (`fix`, `motion`, `noise`, …) so labels stay consistent across annotators
-- [ ] Annotation progress — track which scans each annotator has marked done (ties into the annotator table above)
+- [ ] Per-annotator progress — the dataset-wide count exists (`/api/bids/annotation-progress`, shown as "(n/N <channel> signals are annotated)"); split it per annotator once the annotator table above lands
+- [ ] Show which channel the Signal Quality and Notes apply to inside the Annotations box (they are saved per channel; the box no longer names it, only the focus chart's y-axis and the progress line do)
+- [ ] Use the full-recording Signal Quality ratings: a Colour by choice in the scatter plot, the rating on the Stats tab, and a column in the PDF
+- [ ] Cache the annotation progress count — the endpoint reads every scan's annotation file on each request; fine for 80 scans, slow for thousands. Keep counts in memory and update them on each POST
 
 ### Planned: FastAPI backend + 3-tab shell
 
@@ -407,9 +413,18 @@ Research features and improvements. Publication readiness (license, packaging, d
 - [ ] Support custom signals those computations by convolving physiological response functions (Birn et al. 2006/2008 respiration-BOLD, Chang & Glover 2009 cardiac/respiratory response functions)
 - [ ] Production build, the server plugin only works in Vite dev mode; the FastAPI backend planned above should supersede this, otherwise would need an Express/Fastify server for production. That server must also serve `data/quality/` for the quality page
 
-### Viewer UX
+### Stats, scatter plot and PDF
 
-- [ ] Improve the y-axis by reducing the number of ticks when it gets crowded
+- [ ] Split the PDF's per-scan metrics table per channel (`src/quality/report.ts`, scan pages), as the Stats tab already does, so it has no empty cells for metrics that belong to another channel
+- [ ] Move `src/viewer/sqi-table.ts` to `src/quality/` under a clearer name (e.g. `metric-columns.ts`): it now only holds the metric labels, groups and number format used by the scatter plot, the Stats tab and the PDF
+- [ ] Optional group toggle in "Metrics shown": the group headings are fixed now, so Show all / Hide all are the only bulk controls
+
+### Docs and user study
+
+- [ ] `docs/user-study.md` Part B (tasks 8–13) still describes the Stats Group tab and its histograms, which were removed: the scatter plot is now at the bottom of Explore and Annotate and the tab is called Stats; rewrite those tasks
+- [ ] `docs/user-study.md` task 6 still says "Click **Compute SQI**", which no longer exists; replace it (e.g. find the cardiac channel's SNR on the Stats tab, or rate the full recording's Signal Quality and add Notes)
+- [ ] Add user-study tasks for the new Annotations box (Signal Quality, Notes) and the annotated count
+- [ ] Retake the screenshots in `user_facing/` (e.g. `physviz_sqi.png` shows the removed SQI table) and any in the README or paper for the new layout (sidebar, Annotations box)
 
 ### BIDS discovery (bottom-up)
 
@@ -419,10 +434,11 @@ Research features and improvements. Publication readiness (license, packaging, d
   - Sidecars by BIDS inheritance: a sidecar applies if it sits in the data file's folder or above and its entities are a subset of the file's; nearer/more specific wins, values merged
   - Confounds and BOLD timing matched on sub/ses/task/run (run numeric) anywhere in the index; `BIDSDER_ROOT` becomes optional and `resolveBidsRoots` goes away
   - Raw dataset info from the `dataset_description.json` nearest above the physio files, derivatives info from the one above the confounds
-  - Same function signatures and API outputs, so the viewer, Stats tabs and metrics script don't change
+  - Same function signatures and API outputs, so the viewer, Stats tab and metrics script don't change
   - Defaults to confirm: same scan with raw and `desc-preproc` physio → prefer preprocessed; search only inside the given folder (no sibling folders)
 - [ ] Tests for it (`server/__tests__/bids-discovery.test.ts`, temp-folder datasets, never `data/`): CNeuroMod layout given by its parent folder; physio outside `func/` and extra nesting; sidecar inheritance (subject, session, run-less, top-level; most specific wins, merged); numeric run matching and mixed run/run-less; broken symlinks and hidden folders skipped; a root without physio returns no scans instead of crashing; existing fixture and real-dataset tests still pass
 
 ### Testing
 
+- [ ] Page-level tests under jsdom for the wiring in `src/viewer/main.ts` and `src/quality/main.ts`: Signal Quality buttons toggle and save, Notes save on blur and never to another scan, the progress line updates after a save, Metrics shown redraws without moving the page, Colour by hides when the dataset has nothing to colour by, the Stats tab and scatter plot stay hidden without quality metrics, the viewed scan's point is highlighted (needs `jsdom`, same as the chart-core tests in docs/JOSS-TODO.md)
 - [ ] Add a test suite that runs against every existing dataset under `data/` (`ds000210`, `ds006644`, `movie10`, `shinobi`): subject/session/task/run discovery, physio + confounds reads, scan-onset timing, dataset info, and annotation path resolution (dataset name, `func/` layout). Skip a dataset gracefully when its files aren't downloaded. `server/__tests__/bids-layout.test.ts` already covers `ds006644` and `ds000210`; `movie10` and `shinobi` (raw data in `physprep/`) are still missing

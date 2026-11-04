@@ -58,6 +58,29 @@ export async function fetchDatasetQuality(dataset: string): Promise<LoadedDatase
   return { summary, rows: parseQualityTsv(tsv) };
 }
 
+/** Whether the served dataset's PDF report is saved, and where to open it */
+export interface ReportStatus {
+  exists: boolean;
+  url: string;
+}
+
+export async function fetchReportStatus(): Promise<ReportStatus | null> {
+  const res = await fetch('/api/quality-report').catch(() => null);
+  if (!res?.ok) return null;
+  return res.json();
+}
+
+/** Send the PDF the Stats tab built; the dev server saves it next to the metrics */
+export async function saveReport(pdf: Blob): Promise<ReportStatus> {
+  const res = await fetch('/api/quality-report', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/pdf' },
+    body: pdf,
+  });
+  if (!res.ok) throw new Error(`The server did not save the PDF (${res.status})`);
+  return res.json();
+}
+
 export async function fetchWaveforms(dataset: string, scan: ScanKeyLike): Promise<WaveformFile | null> {
   return fetchJson<WaveformFile>(
     `${QUALITY_BASE}/${encodeURIComponent(dataset)}/${WAVEFORMS_DIR}/${scanId(scan)}_waveforms.json`,

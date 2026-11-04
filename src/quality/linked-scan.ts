@@ -1,11 +1,11 @@
 import { lastViewedKey, readLastViewed, saveLastViewed } from '@/viewer/persistence';
 import type { ScanKeyLike } from './metrics-tsv';
 
-// Links the scan shown in Explore and Annotate with the one in Stats
-// Individual, through the viewer's own "last viewed" entry in localStorage
+// Links the scan shown in Explore and Annotate with the one in Stats, through
+// the viewer's own "last viewed" entry in localStorage
 // (src/viewer/persistence.ts). The viewer resumes from that entry when it
-// loads, so no viewer code changes: Stats Individual reads it to open the
-// viewer's scan, and writes it so the viewer opens the scan shown here.
+// loads, so no viewer code changes: Stats reads it to open the viewer's scan,
+// and writes it so the viewer opens the scan shown here.
 
 /** Scan last shown in Explore and Annotate for this dataset, if any */
 export function viewerScan(datasetName: string | null, store?: Storage | null): ScanKeyLike | null {

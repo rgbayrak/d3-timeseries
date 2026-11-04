@@ -3,7 +3,7 @@ import { METRIC_COLUMNS, sameScanKey, scanId } from './metrics-tsv';
 import type { MetricKey, QualityRow, ScanKeyLike, ParticipantsTable } from './metrics-tsv';
 import { finiteValues } from './stats';
 
-// Pure helpers behind the Group and Individual tabs (no DOM access).
+// Pure helpers behind the Stats tab, the scatter plot in Explore and Annotate and the PDF (no DOM access).
 
 export interface MetricDef {
   key: MetricKey;
@@ -29,7 +29,7 @@ export const METRIC_DEFS: MetricDef[] = METRIC_COLUMNS.map((c) => {
 /** Metric groups in first-appearance order */
 export const METRIC_GROUPS: string[] = [...new Set(METRIC_DEFS.map((m) => m.group))];
 
-// ── Metric visibility (the Metrics picker) ───────────────
+// ── Metric visibility (Metrics shown on the Stats tab) ───
 
 /** Which metrics are shown; a missing set means all of them */
 export type VisibleMetrics = ReadonlySet<MetricKey>;
@@ -55,25 +55,6 @@ export function serializeVisibleMetrics(visible: VisibleMetrics): string {
 
 export function groupKeys(group: string): MetricKey[] {
   return METRIC_DEFS.filter((m) => m.group === group).map((m) => m.key);
-}
-
-/** 'all', 'none' or 'some' of a group's metrics are visible (drives the group checkbox) */
-export function groupState(visible: VisibleMetrics, group: string): 'all' | 'none' | 'some' {
-  const keys = groupKeys(group);
-  const shown = keys.filter((k) => visible.has(k)).length;
-  return shown === keys.length ? 'all' : shown === 0 ? 'none' : 'some';
-}
-
-/** Show the whole group, or hide it if it is already fully shown */
-export function toggleGroup(visible: VisibleMetrics, group: string): Set<MetricKey> {
-  const next = new Set(visible);
-  const keys = groupKeys(group);
-  const hide = groupState(visible, group) === 'all';
-  for (const k of keys) {
-    if (hide) next.delete(k);
-    else next.add(k);
-  }
-  return next;
 }
 
 /** Metrics measured in the channel's own unit (from the physio sidecar, when it gives one) */
@@ -120,11 +101,6 @@ export function rowsForChannel(rows: QualityRow[], channel: string): QualityRow[
   return rows.filter((r) => r.channel === channel);
 }
 
-/** Channel shown first; non-physiological columns (e.g. trigger) are already excluded by the script */
-export function defaultChannel(channels: string[]): string {
-  return channels[0] ?? '';
-}
-
 /** Metrics with at least one finite value among the rows, limited to the visible ones when given */
 export function availableMetrics(rows: QualityRow[], visible?: VisibleMetrics): MetricKey[] {
   return ALL_METRICS.filter(
@@ -133,8 +109,8 @@ export function availableMetrics(rows: QualityRow[], visible?: VisibleMetrics): 
 }
 
 /** Default scatter axes: SNR against beat correlation where available, else the first available metrics */
-export function defaultMetricPair(rows: QualityRow[], visible?: VisibleMetrics): [MetricKey, MetricKey] {
-  const avail = availableMetrics(rows, visible);
+export function defaultMetricPair(rows: QualityRow[]): [MetricKey, MetricKey] {
+  const avail = availableMetrics(rows);
   const pick = (prefs: MetricKey[], exclude?: MetricKey): MetricKey =>
     prefs.find((k) => avail.includes(k) && k !== exclude) ??
     avail.find((k) => k !== exclude) ??
@@ -300,12 +276,8 @@ export function participantAxisChoices(table: ParticipantsTable | null, rows: Qu
 }
 
 /** Metric axis options for one channel's rows; labels carry units where known */
-export function metricAxisChoices(
-  rows: QualityRow[],
-  visible?: VisibleMetrics,
-  channelUnits?: Record<string, string>,
-): AxisChoice[] {
-  const avail = availableMetrics(rows, visible);
+export function metricAxisChoices(rows: QualityRow[], channelUnits?: Record<string, string>): AxisChoice[] {
+  const avail = availableMetrics(rows);
   const channel = rows[0]?.channel ?? '';
   return METRIC_DEFS.filter((m) => avail.includes(m.key)).map((m) => ({
     value: m.key,
@@ -355,19 +327,14 @@ export function xAxisChoices(
   channelRows: QualityRow[],
   table: ParticipantsTable | null,
   allRows: QualityRow[],
-  visible?: VisibleMetrics,
   channelUnits?: Record<string, string>,
 ): AxisChoice[] {
-  return [...metricAxisChoices(channelRows, visible, channelUnits), ...participantAxisChoices(table, allRows)];
+  return [...metricAxisChoices(channelRows, channelUnits), ...participantAxisChoices(table, allRows)];
 }
 
-/** Scatter Y options: visible quality metrics with values for this channel */
-export function yAxisChoices(
-  channelRows: QualityRow[],
-  visible?: VisibleMetrics,
-  channelUnits?: Record<string, string>,
-): AxisChoice[] {
-  return metricAxisChoices(channelRows, visible, channelUnits);
+/** Scatter Y options: every quality metric with values for this channel */
+export function yAxisChoices(channelRows: QualityRow[], channelUnits?: Record<string, string>): AxisChoice[] {
+  return metricAxisChoices(channelRows, channelUnits);
 }
 
 export interface ScatterDatum {
@@ -455,19 +422,15 @@ export function datasetSummaryText(s: SummaryInput, rows: QualityRow[]): string 
   return sentences.join(' ');
 }
 
-/**
- * Bold the key facts in already-escaped summary text: counts with their unit
- * ("80 scans", "40 subjects", "3 tasks") and sampling rates ("496 Hz"). The
- * text itself stays the same (the PDF uses it as plain text).
- */
-export function boldFacts(escapedText: string): string {
-  return escapedText.replace(/\b\d+(?:\.\d+)?\s(?:scans?|subjects?|tasks?|Hz)\b/g, (m) => `<strong>${m}</strong>`);
-}
-
 const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
 export function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
+}
+
+/** A channel name (physio TSV column) as HTML, in the shared file-name style (.channel-name in src/shell/tabs.css) */
+export function channelName(channel: string): string {
+  return `<span class="channel-name">${esc(channel)}</span>`;
 }
 
 export function formatSeconds(s: number): string {

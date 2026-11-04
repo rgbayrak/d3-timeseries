@@ -11,7 +11,28 @@ import {
 import type { MetricKey, QualityRow } from '../metrics-tsv';
 import { minMaxEnvelope, roundSig } from '../envelope';
 import { histogramBins, finiteMean, paddedExtent, percentileRank } from '../stats';
-import { parseRoute, routeHash } from '../route';
+import { legendHtml } from '../scatter-panel';
+
+describe('scatter colour legend', () => {
+  const groups = [
+    { label: '01', color: '#111111' },
+    { label: '02', color: '#222222' },
+  ];
+
+  it('names what the colours mean before the groups, then the viewed scan', () => {
+    const html = legendHtml('Session', groups, true);
+    expect(html.indexOf('Session:')).toBeLessThan(html.indexOf('>01<'));
+    expect(html.indexOf('>02<')).toBeLessThan(html.indexOf('Now viewing'));
+    expect(html).toContain('legend-viewed');
+  });
+
+  it('lists no groups when every point has one colour, and escapes labels', () => {
+    expect(legendHtml(null, groups, true)).not.toContain('>01<');
+    expect(legendHtml(null, groups, false)).toBe('');
+    expect(legendHtml('Task', [{ label: '<b>', color: '#000' }], false)).toContain('&lt;b&gt;');
+  });
+});
+import { parseScanHash, scanHash, statsUrl } from '../route';
 import {
   METRIC_DEFS,
   availableMetrics,
@@ -19,10 +40,8 @@ import {
   colorGroups,
   colorByOptions,
   colorKey,
-  boldFacts,
   datasetSummaryText,
   humanList,
-  defaultChannel,
   defaultMetricPair,
   esc,
   ordinal,
@@ -146,23 +165,20 @@ describe('stats', () => {
   });
 });
 
-describe('routes', () => {
-  it('defaults to the group tab', () => {
-    expect(parseRoute('')).toEqual({ tab: 'group' });
-    expect(parseRoute('#nonsense')).toEqual({ tab: 'group' });
+describe('scan links to the Stats tab', () => {
+  it('round-trips a scan and builds the Stats address', () => {
+    const scan = { sub: '01', ses: '02', task: 'rest', run: '' };
+    expect(scanHash(scan)).toBe('#scan?sub=01&ses=02&task=rest');
+    expect(parseScanHash(scanHash(scan))).toEqual(scan);
+    expect(statsUrl(scan)).toBe('/quality.html#scan?sub=01&ses=02&task=rest');
   });
 
-  it('round-trips a subject route', () => {
-    const route = { tab: 'subject' as const, scan: { sub: '01', ses: '02', task: 'rest', run: '' } };
-    const hash = routeHash(route);
-    expect(hash).toBe('#subject?sub=01&ses=02&task=rest');
-    expect(parseRoute(hash)).toEqual(route);
-  });
-
-  it('leaves scan null without sub and task, and ignores old dataset links', () => {
-    expect(parseRoute('#subject')).toEqual({ tab: 'subject', scan: null });
-    expect(parseRoute('#subject?dataset=x')).toEqual({ tab: 'subject', scan: null });
-    expect(routeHash({ tab: 'subject', scan: null })).toBe('#subject');
+  it('has no scan without sub and task, and still reads older #subject links', () => {
+    expect(parseScanHash('')).toBeNull();
+    expect(parseScanHash('#scan')).toBeNull();
+    expect(parseScanHash('#group')).toBeNull();
+    expect(parseScanHash('#subject?dataset=x')).toBeNull();
+    expect(parseScanHash('#subject?sub=03&task=rest&run=01')).toEqual({ sub: '03', ses: '', task: 'rest', run: '01' });
   });
 });
 
@@ -183,11 +199,6 @@ describe('model', () => {
     expect(uniqueScans(rows).map((s) => s.sub)).toEqual(['01', '02']);
   });
 
-  it('shows the first channel by default', () => {
-    expect(defaultChannel(['cardiac', 'respiratory'])).toBe('cardiac');
-    expect(defaultChannel([])).toBe('');
-  });
-
   it('picks scatter axes that have values', () => {
     expect(availableMetrics(rows)).toEqual(['snr', 'beatCorrelation']);
     expect(defaultMetricPair(rows)).toEqual(['snr', 'beatCorrelation']);
@@ -205,17 +216,6 @@ describe('model', () => {
     expect(timingCounts(rows)).toEqual({ verified: 1, mismatch: 1 });
     expect(colorGroups(rows, 'task')).toEqual(['motor', 'rest']);
     expect(colorGroups(rows, 'sidecarAssessment')).toEqual(['(none)', 'Fail', 'Pass']);
-  });
-
-  it('bolds counts and sampling rates in the overview text only', () => {
-    expect(boldFacts('This dataset has 80 scans from 40 subjects across 2 tasks. Sampled at 496 Hz.')).toBe(
-      'This dataset has <strong>80 scans</strong> from <strong>40 subjects</strong> across <strong>2 tasks</strong>. ' +
-        'Sampled at <strong>496 Hz</strong>.',
-    );
-    expect(boldFacts('1 scan, 1 subject, 62.5 Hz')).toBe(
-      '<strong>1 scan</strong>, <strong>1 subject</strong>, <strong>62.5 Hz</strong>',
-    );
-    expect(boldFacts('No numbers here.')).toBe('No numbers here.');
   });
 
   it('offers only the Colour by choices the dataset has', () => {

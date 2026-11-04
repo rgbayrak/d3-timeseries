@@ -100,6 +100,7 @@ export function createChart(config: ChartConfig): ChartInstance {
       { x: xScale, y: yScale },
       config.grid,
       dimensions,
+      config.yAxis?.tickCount ?? undefined,
     );
   }
 
