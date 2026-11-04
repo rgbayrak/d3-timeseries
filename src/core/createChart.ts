@@ -28,8 +28,11 @@ export function createChart(config: ChartConfig): ChartInstance {
     margin,
   });
 
+  // A chart that follows its container starts at the container's width, so it
+  // isn't first drawn at config.width, scaled down, then snapped back on resize
+  const resizes = config.resize?.enabled ?? true;
   let dimensions = computeDimensions(
-    config.width ?? (containerEl.clientWidth || 600),
+    (resizes && containerEl.clientWidth) || config.width || 600,
     config.height ?? (containerEl.clientHeight || 400),
   );
 
