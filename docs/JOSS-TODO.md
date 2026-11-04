@@ -12,13 +12,12 @@ tests and CI (passing on GitHub) are done (see the testing section in
 
 ## Phase 2 — Run outside the Vite dev server
 
-Today the server only runs as a Vite dev-mode plugin; reviewers must be able to
-install and run the tool from the README.
+Today the server only runs as a Vite dev-mode plugin; reviewers must be able to install and run the tool from the README.
 
 - [ ] Move the request handling out of `server/bids-physio-plugin.ts` into a plain Node module, with the Vite plugin as a thin wrapper over it
 - [ ] Standalone Node server that serves the production build (`npm run build`, which includes `quality.html`), the `/api/bids/*` endpoints and the computed `data/quality/` files
 - [ ] Single launch command, e.g. `npx physai-qa-interactive --bids-root <path> [--derivatives <path>]`
-- [ ] Tests for the endpoints (status codes, JSON shapes, 400 on unsafe input) against the fixtures
+- [ ] Tests for the endpoints (status codes, JSON shapes, 400 on unsafe input) against the fixtures, including `/api/bids/annotation-progress` and the `waveform_quality` / `waveform_comment` fields in `POST /api/bids/annotations`
 
 ## Phase 3 — Packaging and release
 
