@@ -1,5 +1,7 @@
 import { basename, join, relative, sep } from 'path';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import type { Plugin } from 'vite';
+import { METRICS_TSV_NAME, REPORT_PDF_NAME } from '../src/quality/metrics-tsv';
 import {
   getSubjects,
   getTasks,
@@ -45,6 +47,11 @@ function datasetName(): string {
   if (rel && !rel.startsWith('..')) return rel.split(sep)[0];
   return basename(BIDS_ROOT);
 }
+
+// Quality metrics written by scripts/compute-quality-metrics.ts (default output root)
+const QUALITY_ROOT = join(DATA_DIR, 'quality');
+/** Largest PDF report the server accepts (one page per scan; JPEG pages) */
+const MAX_REPORT_BYTES = 500 * 1024 * 1024;
 
 // Annotations are grouped per dataset: <annotations>/<dataset>/sub-XX/[ses-YY/]func/
 const ANNOTATIONS_ROOT = join(
@@ -236,6 +243,54 @@ export function bidsPhysioPlugin(): Plugin {
                 res.statusCode = 400;
                 res.end(JSON.stringify({ error: 'Invalid annotation payload' }));
               }
+            });
+            return;
+          }
+
+          res.statusCode = 405;
+          res.end(JSON.stringify({ error: 'Method not allowed' }));
+          return;
+        }
+
+        // PDF report of the served dataset's quality metrics, saved next to them.
+        // GET: is it there? POST: the Stats tab sends the PDF it built. Only the
+        // served dataset, at a fixed file name: nothing from the request picks the path.
+        if (req.url?.startsWith('/api/quality-report')) {
+          const dataset = datasetName();
+          const dir = join(QUALITY_ROOT, dataset);
+          const file = join(dir, REPORT_PDF_NAME);
+          const url = `/data/quality/${encodeURIComponent(dataset)}/${REPORT_PDF_NAME}`;
+          res.setHeader('Content-Type', 'application/json');
+
+          if (req.method === 'GET') {
+            res.end(JSON.stringify({ exists: existsSync(file), url }));
+            return;
+          }
+
+          if (req.method === 'POST') {
+            if (!existsSync(join(dir, METRICS_TSV_NAME))) {
+              res.statusCode = 409;
+              res.end(JSON.stringify({ error: 'No quality metrics computed for this dataset' }));
+              return;
+            }
+            const chunks: Buffer[] = [];
+            let size = 0;
+            let tooLarge = false;
+            req.on('data', (chunk: Buffer) => {
+              size += chunk.length;
+              if (size > MAX_REPORT_BYTES) tooLarge = true;
+              else chunks.push(chunk);
+            });
+            req.on('end', () => {
+              const body = Buffer.concat(chunks);
+              if (tooLarge || body.subarray(0, 5).toString('latin1') !== '%PDF-') {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: tooLarge ? 'PDF too large' : 'Not a PDF' }));
+                return;
+              }
+              mkdirSync(dir, { recursive: true });
+              writeFileSync(file, body);
+              res.end(JSON.stringify({ exists: true, url }));
             });
             return;
           }

@@ -21,7 +21,7 @@ import {
   WAVEFORM_QUALITIES,
 } from './annotations';
 import type { WaveformQuality } from '@/data/bids-physio-reader';
-import { renderAnnotationList } from './annotation-panel';
+import { renderAnnotationList, progressColor, escapeHtml } from './annotation-panel';
 import { renderDatasetInfo, renderQualityBadges } from './info';
 import {
   populateSelect,
@@ -30,8 +30,9 @@ import {
   renderStackControls,
   validStacked,
   toggleStacked,
+  physioColumns,
 } from './controls';
-import { stepScan, resolveSearch, isScanStepKey } from './navigation';
+import { stepScan, resolveSearch, isScanStepKey, pickStartScan } from './navigation';
 import { DEFAULT_LAST_VIEWED_KEY, lastViewedKey, saveLastViewed, readLastViewed, resumeFrom } from './persistence';
 import { buildFocusContext } from './charts/focus-context';
 import type { FocusContextHandle } from './charts/focus-context';
@@ -39,6 +40,9 @@ import { buildConfoundsChart } from './charts/confounds';
 import type { ConfoundsChartHandle } from './charts/confounds';
 import { buildStackCharts } from './charts/stack';
 import type { StackChartsHandle } from './charts/stack';
+import { fetchServedDataset, fetchDatasetQuality } from '@/quality/data';
+import { createScatterPanel } from '@/quality/scatter-panel';
+import { parseScanHash, statsUrl } from '@/quality/route';
 
 // Entry point: owns the DOM, the state object and the live charts, and wires
 // user events to the modules that do the work.
@@ -108,15 +112,20 @@ function persistAnnotations() {
     });
 }
 
-/** "(24/80 ch:cardiac signals are annotated)": scans with anything saved for the channel shown */
+/** "(24/80 cardiac signals are annotated)": scans with anything saved for the channel shown */
 async function refreshAnnotationProgress() {
   const channel = els.channelSelect.value;
   if (!channel) return;
   const progress = await fetchAnnotationProgress(channel).catch(() => null);
   if (channel !== els.channelSelect.value) return; // channel changed while waiting
-  els.annotationProgress.textContent = progress
-    ? `(${progress.annotated}/${progress.total} ch:${channel} signals are annotated)`
+  els.annotationProgress.innerHTML = progress
+    ? `(${progress.annotated}/${progress.total} <span class="channel-name">${escapeHtml(channel)}</span> signals are annotated)`
     : '';
+  // Mini bar: fills with the share annotated, yellow → green → blue as it grows
+  const fraction = progress && progress.total > 0 ? progress.annotated / progress.total : 0;
+  els.annotationProgressBar.style.width = `${(fraction * 100).toFixed(1)}%`;
+  els.annotationProgressBar.style.backgroundColor = progressColor(fraction);
+  els.annotationProgressBar.parentElement?.setAttribute('aria-valuenow', String(Math.round(fraction * 100)));
 }
 
 async function loadSavedAnnotations(scan: ScanEntry, channel: string) {
@@ -215,6 +224,7 @@ function buildMainCharts(raw: PhysioRaw, channel: string) {
   });
   if (state.current) loadSavedAnnotations(state.current, channel);
   void refreshAnnotationProgress(); // the count is per channel
+  scatterPanel.setChannel(channel); // one Channel dropdown for both the charts and the scatter plot
 }
 
 // "Auxiliary" label: shown while the stacked channels or the confound chart is.
@@ -226,6 +236,16 @@ function syncAuxiliarySection() {
 const auxiliaryObserver = new MutationObserver(syncAuxiliarySection);
 for (const el of [els.stackSection, els.confoundsSection]) {
   auxiliaryObserver.observe(el, { attributes: true, attributeFilter: ['style'] });
+}
+
+// Auxiliary controls row: shown while its Stack checkboxes or Confound dropdown is
+function syncAuxRow() {
+  const shown = [els.stackRow, els.confoundLabel].some((el) => el.style.display !== 'none');
+  els.auxRow.style.display = shown ? '' : 'none';
+}
+const auxRowObserver = new MutationObserver(syncAuxRow);
+for (const el of [els.stackRow, els.confoundLabel]) {
+  auxRowObserver.observe(el, { attributes: true, attributeFilter: ['style'] });
 }
 
 function rebuildStack(raw: PhysioRaw) {
@@ -284,16 +304,19 @@ async function loadPhysio(scan: ScanEntry) {
     state.raw = raw;
     state.confounds = confounds;
     state.current = { ...scan };
+    scatterPanel.setCurrentScan(state.current); // its point turns pinkish red
 
     els.filename.textContent = raw.filename;
     renderQualityBadges(els.qualityBadges, raw);
 
     // Keep the current channel/confound when the new scan has it; on the first
     // load after a reload, prefer the one restored from localStorage
+    // Only physiological channels are offered (no trigger etc.; same dictionary as the metrics)
     const restored = state.restoredSelection;
-    populateSelect(els.channelSelect, raw.columns, pickPreferred(raw.columns, [restored?.channel, els.channelSelect.value]));
+    const channels = physioColumns(raw.columns);
+    populateSelect(els.channelSelect, channels, pickPreferred(channels, [restored?.channel, els.channelSelect.value]));
     if (restored) state.stackedChannels = restored.stacked;
-    renderStack(raw.columns);
+    renderStack(channels);
     buildMainCharts(raw, els.channelSelect.value);
     rebuildStack(raw);
 
@@ -357,7 +380,7 @@ els.runSelect.addEventListener('change', () => loadPhysio(selectedScan()));
 els.channelSelect.addEventListener('change', () => {
   if (state.raw) {
     // The new main channel leaves the stack options (and the stack, if checked)
-    renderStack(state.raw.columns);
+    renderStack(physioColumns(state.raw.columns));
     buildMainCharts(state.raw, els.channelSelect.value);
     rebuildStack(state.raw);
     if (state.confounds) rebuildConfounds(state.confounds, state.raw);
@@ -402,9 +425,44 @@ els.annotateModeBtn.addEventListener('click', () => {
   els.annotateModeBtn.textContent = state.annotateMode ? 'Annotate: On' : 'Annotate: Off';
 });
 
+// ── Quality metrics: Stats tab and scatter plot ─────────
+
+// Follows the page's Channel dropdown; double-clicking a point opens that scan in Stats
+const scatterPanel = createScatterPanel(
+  {
+    xSelect: els.scatterX,
+    ySelect: els.scatterY,
+    colorSelect: els.scatterColor,
+    chart: els.scatterChart,
+    legend: els.scatterLegend,
+    note: els.scatterNote,
+  },
+  (scan) => {
+    location.href = statsUrl(scan);
+  },
+);
+
+/**
+ * Show the Stats tab and the scatter plot only when the served dataset's
+ * quality metrics have been computed (scripts/compute-quality-metrics.ts);
+ * otherwise both stay hidden.
+ */
+async function loadQualityMetrics() {
+  const served = await fetchServedDataset().catch(() => null);
+  if (!served) return;
+  const data = await fetchDatasetQuality(served.id).catch(() => null);
+  if (!data) return;
+  els.statsTab.style.display = '';
+  els.scatterSection.style.display = ''; // visible before drawing, so the plot takes the section's width
+  scatterPanel.setCurrentScan(state.current); // highlight the scan already open, if any
+  scatterPanel.setChannel(els.channelSelect.value); // same channel as the charts above
+  scatterPanel.show(data);
+}
+
 // ── Init ────────────────────────────────────────────────
 
 async function init() {
+  void loadQualityMetrics(); // independent of the scan loading below
   setLoading('Loading subjects...');
   const [subjects, scans, datasetInfo] = await Promise.all([
     fetchSubjects(),
@@ -415,12 +473,27 @@ async function init() {
   state.scans = scans;
   renderDatasetInfo(els.datasetInfo, datasetInfo);
 
-  // Resume the last-viewed scan for this dataset if it still exists
+  // Keep the last session's channel, confound and stacked channels
   storageKey = lastViewedKey(datasetInfo?.name);
   const resumed = resumeFrom(readLastViewed(storageKey), scans);
   if (resumed) state.restoredSelection = resumed.selection;
 
-  const first = resumed?.scan ?? scans[0];
+  // Which scan to open: a linked one (#scan?… from Stats), else the earliest
+  // one not annotated yet for the remembered channel (so a skipped scan always
+  // comes back), else the last viewed, else the first
+  const linked = parseScanHash(location.hash);
+  if (linked) history.replaceState(null, '', location.pathname); // a reload then follows the rules below
+  const channel = resumed?.selection.channel;
+  const progress = !linked && channel ? await fetchAnnotationProgress(channel).catch(() => null) : null;
+  const first = pickStartScan(scans, {
+    linked,
+    firstUnannotated: progress?.firstUnannotated,
+    lastViewed: resumed?.scan,
+  });
+  if (!first) {
+    setLoading('No scans with readable physio files in this dataset.');
+    return;
+  }
   populateSelect(els.subjectSelect, subjects.map((s) => s.id), first.sub);
   const firstInfo = subjects.find((s) => s.id === first.sub)!;
   populateSelect(els.sessionSelect, firstInfo.sessions, first.ses);

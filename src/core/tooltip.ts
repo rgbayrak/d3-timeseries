@@ -14,7 +14,7 @@ export function createTooltip(config?: TooltipConfig): TooltipInstance | null {
     background: 'rgba(0, 0, 0, 0.8)',
     color: 'white',
     padding: '6px 8px',
-    fontSize: '12px',
+    fontSize: 'var(--fs-sm, 14px)', // shared text size (src/shell/tabs.css) when the page defines it
     borderRadius: '4px',
     lineHeight: '1.3',
     visibility: 'hidden',

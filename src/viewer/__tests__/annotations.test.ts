@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createAnnotation, toAnnotationsFile, fromAnnotationsFile, waveformAssessmentFromFile } from '../annotations';
 import type { AnnotationsFile } from '@/data/bids-physio-reader';
-import { escapeHtml, annotationListHtml, EMPTY_ANNOTATIONS_HTML } from '../annotation-panel';
+import { escapeHtml, annotationListHtml, EMPTY_ANNOTATIONS_HTML, progressColor } from '../annotation-panel';
 
 const scan = { sub: '01', ses: '02', task: 'rest', run: '01' };
 
@@ -76,6 +76,22 @@ describe('whole-waveform rating and comment', () => {
     expect(waveformAssessmentFromFile(old)).toEqual({ quality: null, comment: '' });
     const odd = { ...old, waveform_quality: 'great' } as unknown as AnnotationsFile;
     expect(waveformAssessmentFromFile(odd).quality).toBeNull();
+  });
+});
+
+describe('annotation progress bar colour', () => {
+  it('is yellow at the start, green halfway and blue when done', () => {
+    expect(progressColor(0)).toBe('#e3b505');
+    expect(progressColor(0.5)).toBe('#2fa36b');
+    expect(progressColor(1)).toBe('#3b6fd8');
+  });
+
+  it('blends between them and clamps out-of-range values', () => {
+    expect(progressColor(0.25)).not.toBe(progressColor(0));
+    expect(progressColor(0.25)).not.toBe(progressColor(0.5));
+    expect(progressColor(-1)).toBe('#e3b505');
+    expect(progressColor(2)).toBe('#3b6fd8');
+    expect(progressColor(NaN)).toBe('#e3b505');
   });
 });
 

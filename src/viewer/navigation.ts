@@ -13,6 +13,24 @@ export function stepScan(scans: ScanEntry[], current: ScanEntry, delta: number):
 }
 
 /**
+ * Scan Explore and Annotate opens on, in order:
+ *  1. one named in the link (e.g. "Open this scan in Explore and Annotate" from Stats),
+ *  2. the earliest scan (hierarchy order) with nothing annotated yet for the channel,
+ *     so a skipped scan always comes back,
+ *  3. the last-viewed scan (everything annotated),
+ *  4. the first scan.
+ * Candidates that are not in `scans` are skipped.
+ */
+export function pickStartScan(
+  scans: ScanEntry[],
+  candidates: { linked?: ScanEntry | null; firstUnannotated?: ScanEntry | null; lastViewed?: ScanEntry | null },
+): ScanEntry | undefined {
+  const find = (c: ScanEntry | null | undefined) =>
+    c ? scans.find((s) => s.sub === c.sub && s.ses === c.ses && s.task === c.task && s.run === c.run) : undefined;
+  return find(candidates.linked) ?? find(candidates.firstUnannotated) ?? find(candidates.lastViewed) ?? scans[0];
+}
+
+/**
  * Resolve a search box query to a scan. Tried in order: a subject ("sub-03" or
  * "03", jumps to its first scan), a session of the current subject, then that
  * session in any subject. Returns null when nothing matches.

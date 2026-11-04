@@ -1,11 +1,9 @@
-import { fetchServedDataset, fetchDatasetQuality } from './data';
+import { fetchServedDataset, fetchDatasetQuality, fetchReportStatus, saveReport } from './data';
 import type { LoadedDataset, ServedDataset } from './data';
 import { shareScanWithViewer, viewerScan } from './linked-scan';
-import { parseRoute, routeHash } from './route';
-import type { Route } from './route';
+import { parseScanHash, scanHash } from './route';
 import type { ScanKeyLike } from './metrics-tsv';
 import { sameScanKey } from './metrics-tsv';
-import { createGroupTab } from './group-tab';
 import { createIndividualTab } from './individual-tab';
 import { buildQualityReport } from './report';
 import { createMetricPicker } from './metric-picker';
@@ -14,8 +12,9 @@ import { fetchDatasetInfo } from '@/data/bids-physio-reader';
 import { renderDatasetInfo } from '@/viewer/info';
 import type { VisibleMetrics } from './model';
 
-// Entry for quality.html: owns the page elements, the hash route and the
-// loaded dataset (the one the dev server serves); the tab modules do the rendering.
+// Entry for quality.html (the Stats tab): owns the page elements, the hash
+// (#scan?sub=…) and the loaded dataset (the one the dev server serves);
+// individual-tab.ts does the rendering.
 
 function byId<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -24,22 +23,14 @@ function byId<T extends HTMLElement>(id: string): T {
 }
 
 const els = {
-  tabGroup: byId<HTMLButtonElement>('tab-group'),
-  tabSubject: byId<HTMLButtonElement>('tab-subject'),
-  pdfBtn: byId<HTMLButtonElement>('pdf-btn'),
-  pdfScans: byId<HTMLInputElement>('pdf-scans'),
+  reportStatus: byId<HTMLElement>('report-status'),
   datasetInfo: byId<HTMLElement>('dataset-info'),
   status: byId<HTMLElement>('status'),
-  groupSection: byId<HTMLElement>('group-tab'),
-  subjectSection: byId<HTMLElement>('subject-tab'),
-  /** Sidebar blocks for Stats Individual only: participant and recording details */
-  /** Sidebar block for Stats Group only */
-  sideOverview: byId<HTMLElement>('side-overview'),
-  sideSubject: byId<HTMLElement>('side-subject'),
-  sideScan: byId<HTMLElement>('side-scan'),
+  /** "Open this scan in Explore and Annotate" */
+  openViewer: byId<HTMLAnchorElement>('open-viewer'),
 };
 
-// Metrics picker: which metrics the Stats tabs and the PDF show; remembered in this browser only
+// Metrics shown: which metrics the Stats tables and histograms show; remembered in this browser only
 const VISIBLE_METRICS_KEY = 'physai-quality-visible-metrics';
 
 function readVisibleMetrics(): VisibleMetrics {
@@ -63,30 +54,12 @@ const metricPicker = createMetricPicker(byId<HTMLElement>('metric-picker'), read
   // Keep the page exactly where it is: the redraw changes the graphs' height,
   // and the browser would otherwise shift or clamp the scroll position
   const y = window.scrollY;
-  groupTab.setVisibleMetrics(visible);
   // Only the metric tables and histograms change: no full redraw
-  if (route.tab === 'subject') individualTab.refreshMetrics();
+  statsTab.refreshMetrics();
   window.scrollTo(0, y);
 });
 
-const groupTab = createGroupTab(
-  {
-    summary: byId('group-summary'),
-    channelSelect: byId('channel-select'),
-    xSelect: byId('x-select'),
-    ySelect: byId('y-select'),
-    colorSelect: byId('color-select'),
-    scatter: byId('scatter-chart'),
-    legend: byId('scatter-legend'),
-    note: byId('scatter-note'),
-    histTitle: byId('group-hist-title'),
-    histograms: byId('group-histograms'),
-  },
-  openScan,
-  metricPicker.visible(),
-);
-
-const individualTab = createIndividualTab(
+const statsTab = createIndividualTab(
   {
     prevBtn: byId('scan-prev'),
     nextBtn: byId('scan-next'),
@@ -103,12 +76,11 @@ const individualTab = createIndividualTab(
 /** The dataset the dev server serves (same as Explore and Annotate) and its loaded metrics */
 let served: ServedDataset | null = null;
 let data: LoadedDataset | null = null;
-let route: Route = parseRoute(location.hash);
-/** Whether the Group tab has been drawn, so returning to it keeps the user's plot settings */
-let groupShown = false;
+/** Scan last drawn, to tell a new scan from a redraw of the same one */
+let lastScan: ScanKeyLike | null = null;
 
 function openScan(scan: ScanKeyLike) {
-  location.hash = routeHash({ tab: 'subject', scan });
+  location.hash = scanHash(scan);
 }
 
 function setStatus(html: string) {
@@ -116,111 +88,75 @@ function setStatus(html: string) {
   els.status.style.display = html ? '' : 'none';
 }
 
-function showTab(tab: Route['tab']) {
-  els.groupSection.style.display = tab === 'group' ? '' : 'none';
-  els.subjectSection.style.display = tab === 'subject' ? '' : 'none';
-  els.sideOverview.style.display = tab === 'group' ? '' : 'none';
-  els.sideSubject.style.display = tab === 'subject' ? '' : 'none';
-  els.sideScan.style.display = tab === 'subject' ? '' : 'none';
-  els.tabGroup.classList.toggle('active', tab === 'group');
-  els.tabSubject.classList.toggle('active', tab === 'subject');
+function showScanFromHash(): void {
+  if (!served || !data) return;
+  // No scan in the link: open the one last shown in Explore and Annotate
+  const wanted = parseScanHash(location.hash) ?? viewerScan(served.name);
+  const shown = statsTab.show(served.id, data, wanted);
+  // ...and make Explore and Annotate open the scan shown here: the link names it
+  // (Explore otherwise opens the earliest scan not annotated yet)
+  if (shown) {
+    shareScanWithViewer(served.name, shown);
+    els.openViewer.href = `/${scanHash(shown)}`;
+  }
+  // Back to the top only when a different scan opens (Prev/Next, a scatter double-click)
+  if (!shown || !lastScan || !sameScanKey(shown, lastScan)) window.scrollTo(0, 0);
+  lastScan = shown;
 }
 
-function applyRoute(): void {
-  route = parseRoute(location.hash);
-  showTab(route.tab);
-  if (!served || !data) return;
+window.addEventListener('hashchange', showScanFromHash);
 
-  if (route.tab === 'group') {
-    if (!groupShown) {
-      groupTab.show(data);
-      groupShown = true;
-    }
-  } else {
-    // No scan in the link: open the one last shown in Explore and Annotate
-    const wanted = route.scan ?? viewerScan(served.name);
-    const shown = individualTab.show(served.id, data, wanted);
-    // ...and make Explore and Annotate open the scan shown here
-    if (shown) shareScanWithViewer(served.name, shown);
-    // Back to the top only when a different scan opens (Prev/Next, a scatter double-click)
-    const changed = !shown || !lastIndividualScan || !sameScanKey(shown, lastIndividualScan);
-    if (changed) window.scrollTo(0, 0);
-    lastIndividualScan = shown;
-  }
+// PDF report: built once per computed dataset and saved by the dev server next
+// to the metrics (data/quality/<dataset>/quality_report.pdf). The compute script
+// deletes it, so a missing file means new metrics: build it in the background.
+function showReportLink(url: string) {
+  els.reportStatus.innerHTML =
+    `Saved with the metrics. <a href="${esc(url)}" target="_blank" rel="noopener">Open the PDF report</a>`;
 }
 
-/** Scan last drawn in Stats Individual, to tell a new scan from a redraw of the same one */
-let lastIndividualScan: ScanKeyLike | null = null;
-
-els.tabGroup.addEventListener('click', () => {
-  location.hash = routeHash({ tab: 'group' });
-});
-els.tabSubject.addEventListener('click', () => {
-  // Without a scan in the link, Stats Individual opens the scan last shown in either tab
-  location.hash = routeHash({ tab: 'subject', scan: null });
-});
-
-window.addEventListener('hashchange', applyRoute);
-
-// PDF: build every visual for the dataset (not just what is on screen) and download it
-const pdfLabel = els.pdfBtn.textContent ?? 'Download PDF';
-els.pdfBtn.addEventListener('click', async () => {
+async function ensureReport() {
   if (!served || !data) return;
-  const dataset = served.id;
-  // The scatter axes come from the Group tab; make sure it has been set up
-  if (!groupShown) {
-    groupTab.show(data);
-    groupShown = true;
+  const status = await fetchReportStatus();
+  if (!status) {
+    els.reportStatus.textContent = 'The dev server cannot save the PDF report.';
+    return;
   }
-
-  els.pdfBtn.disabled = true;
+  if (status.exists) {
+    showReportLink(status.url);
+    return;
+  }
   try {
-    const blob = await buildQualityReport({
-      dataset,
+    const pdf = await buildQualityReport({
+      dataset: served.id,
       data,
-      selection: groupTab.selection(),
-      includeScans: els.pdfScans.checked,
-      visible: metricPicker.visible(),
       onProgress: (msg) => {
-        els.pdfBtn.textContent = `Building PDF: ${msg}…`;
+        els.reportStatus.textContent = `Building the PDF report: ${msg}…`;
       },
     });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${dataset}_quality-metrics.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    els.reportStatus.textContent = 'Saving the PDF report…';
+    showReportLink((await saveReport(pdf)).url);
   } catch (err) {
     console.error(err);
-    setStatus(`Could not build the PDF: ${esc(err instanceof Error ? err.message : String(err))}`);
-  } finally {
-    els.pdfBtn.textContent = pdfLabel;
-    els.pdfBtn.disabled = false;
+    els.reportStatus.textContent = `Could not build the PDF report: ${err instanceof Error ? err.message : String(err)}`;
   }
-});
+}
 
 async function init() {
-  els.pdfBtn.disabled = true;
   const [servedDataset, datasetInfo] = await Promise.all([
     fetchServedDataset().catch(() => null),
     fetchDatasetInfo().catch(() => null),
   ]);
   served = servedDataset;
-  // Dataset header under the tabs: drawn once, same for both Stats tabs and Explore and Annotate
+  // Dataset header under the tabs, same as Explore and Annotate
   renderDatasetInfo(els.datasetInfo, datasetInfo);
   if (!els.datasetInfo.hasChildNodes() && served) els.datasetInfo.textContent = served.id;
   if (!served) {
-    showTab(route.tab);
     setStatus('Could not ask the dev server which dataset it serves. Start it with <code>npm run dev</code>.');
     return;
   }
   setStatus(`Loading ${esc(served.id)}…`);
   data = await fetchDatasetQuality(served.id).catch(() => null);
   if (!data) {
-    showTab(route.tab);
     setStatus(
       `No quality metrics for <strong>${esc(served.id)}</strong> yet. Compute them with ` +
         `<code>npx vite-node scripts/compute-quality-metrics.ts ${esc(served.id)}</code> and reload.`,
@@ -228,8 +164,8 @@ async function init() {
     return;
   }
   setStatus('');
-  els.pdfBtn.disabled = false;
-  applyRoute();
+  showScanFromHash();
+  void ensureReport(); // after the scan is drawn, so the page is usable while it builds
 }
 
 void init();

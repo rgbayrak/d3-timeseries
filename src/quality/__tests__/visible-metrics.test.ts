@@ -7,13 +7,11 @@ import {
   availableMetrics,
   defaultMetricPair,
   groupKeys,
-  groupState,
   metricAxisChoices,
   metricAxisLabel,
   metricUnit,
   parseVisibleMetrics,
   serializeVisibleMetrics,
-  toggleGroup,
   xAxisChoices,
   yAxisChoices,
 } from '../model';
@@ -44,19 +42,6 @@ describe('metric groups', () => {
     expect(METRIC_GROUPS).toEqual(['Basic', 'Distribution', 'PaPaGei', 'PhysioQC']);
     expect(METRIC_GROUPS.flatMap(groupKeys).sort()).toEqual([...ALL_METRICS].sort());
     expect(groupKeys('PaPaGei')).toEqual(['svri', 'ipa', 'sqi']);
-  });
-
-  it('reports and toggles a group', () => {
-    const all = new Set(ALL_METRICS);
-    expect(groupState(all, 'PaPaGei')).toBe('all');
-    const without = toggleGroup(all, 'PaPaGei');
-    expect(groupState(without, 'PaPaGei')).toBe('none');
-    expect(without.has('snr')).toBe(true);
-
-    const partial = new Set<MetricKey>(['svri']);
-    expect(groupState(partial, 'PaPaGei')).toBe('some');
-    // a partly shown group is completed, not cleared
-    expect(groupState(toggleGroup(partial, 'PaPaGei'), 'PaPaGei')).toBe('all');
   });
 });
 
@@ -94,29 +79,25 @@ describe('axis units', () => {
     expect(metricAxisLabel('mean', 'respiratory', units)).toBe('Mean');
     expect(metricAxisLabel('zeroCrossingRate', 'cardiac')).toBe('ZCR (Hz)');
     const rows = [row({ mean: 1, snr: 2 })];
-    expect(metricAxisChoices(rows, undefined, units).map((c) => c.label)).toEqual(['Mean (mV)', 'SNR']);
+    expect(metricAxisChoices(rows, units).map((c) => c.label)).toEqual(['Mean (mV)', 'SNR']);
   });
 });
 
-describe('hidden metrics leave the plots', () => {
+describe('hidden metrics', () => {
   const rows = [row({ snr: 1, kurtosis: 2, beatCorrelation: 0.9 })];
 
-  it('filters available metrics and axis menus', () => {
+  it('leave the Stats tables and histograms (availableMetrics)', () => {
     const visible = new Set<MetricKey>(['snr', 'kurtosis']);
     expect(availableMetrics(rows)).toEqual(['snr', 'kurtosis', 'beatCorrelation']);
     expect(availableMetrics(rows, visible)).toEqual(['snr', 'kurtosis']);
-    expect(metricAxisChoices(rows, visible).map((c) => c.value)).toEqual(['snr', 'kurtosis']);
-    expect(yAxisChoices(rows, visible).map((c) => c.value)).toEqual(['snr', 'kurtosis']);
-    expect(xAxisChoices(rows, null, rows, visible).map((c) => c.value)).toEqual(['snr', 'kurtosis']);
-  });
-
-  it('picks default axes among the visible metrics', () => {
-    expect(defaultMetricPair(rows)).toEqual(['snr', 'beatCorrelation']);
-    expect(defaultMetricPair(rows, new Set<MetricKey>(['snr', 'kurtosis']))).toEqual(['snr', 'kurtosis']);
-  });
-
-  it('shows nothing when every metric is hidden', () => {
     expect(availableMetrics(rows, new Set())).toEqual([]);
-    expect(yAxisChoices(rows, new Set())).toEqual([]);
+  });
+
+  it('never affect the scatter axis menus or their default pair', () => {
+    const all = ['snr', 'kurtosis', 'beatCorrelation'];
+    expect(metricAxisChoices(rows).map((c) => c.value)).toEqual(all);
+    expect(yAxisChoices(rows).map((c) => c.value)).toEqual(all);
+    expect(xAxisChoices(rows, null, rows).map((c) => c.value)).toEqual(all);
+    expect(defaultMetricPair(rows)).toEqual(['snr', 'beatCorrelation']);
   });
 });

@@ -53,9 +53,17 @@ describe('annotation progress', () => {
     writeAnnotations(root, payload({ sub: '02', ses: '', run: '', annotations: [], waveform_quality: 'bad' }));
     writeAnnotations(root, payload({ sub: '03', annotations: [] })); // saved but empty
     writeAnnotations(root, payload({ sub: '03', channel: 'respiratory' })); // other channel
-    expect(annotationProgress(root, scans, 'cardiac')).toEqual({ annotated: 2, total: 3 });
-    expect(annotationProgress(root, scans, 'respiratory')).toEqual({ annotated: 1, total: 3 });
-    expect(annotationProgress(root, [], 'cardiac')).toEqual({ annotated: 0, total: 0 });
+    // sub-03 has a cardiac file but nothing in it, so it is the first one left to do
+    expect(annotationProgress(root, scans, 'cardiac')).toEqual({ annotated: 2, total: 3, firstUnannotated: scans[2] });
+    // respiratory: only sub-03 is annotated, so the earliest scan (sub-01) comes first
+    expect(annotationProgress(root, scans, 'respiratory')).toEqual({ annotated: 1, total: 3, firstUnannotated: scans[0] });
+    expect(annotationProgress(root, [], 'cardiac')).toEqual({ annotated: 0, total: 0, firstUnannotated: null });
+  });
+
+  it('has no first unannotated scan once every scan is annotated', () => {
+    const scans = [{ sub: '01', ses: '02', task: 'rest', run: '01' }];
+    writeAnnotations(root, payload());
+    expect(annotationProgress(root, scans, 'cardiac').firstUnannotated).toBeNull();
   });
 
   it('rejects channel names that could escape the annotations folder', () => {

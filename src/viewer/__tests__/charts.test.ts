@@ -1,6 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import { nearestPoint, paddedValueExtent } from '../charts/shared';
 import { confoundColor, splitByColor, confoundYDomain, FD_GOOD_MM, FD_ACCEPTABLE_MM } from '../charts/confounds';
+import { windowLengthLabel } from '../charts/focus-context';
+
+describe('window length over the overview selection', () => {
+  it('rounds to whole seconds from 10 s, tenths from 1 s, hundredths below', () => {
+    expect(windowLengthLabel(60)).toBe('60 sec');
+    expect(windowLengthLabel(59.6)).toBe('60 sec');
+    expect(windowLengthLabel(7.46)).toBe('7.5 sec');
+    expect(windowLengthLabel(0.254)).toBe('0.25 sec');
+  });
+
+  it('shows nothing for an invalid length', () => {
+    expect(windowLengthLabel(NaN)).toBe('');
+    expect(windowLengthLabel(-1)).toBe('');
+  });
+});
 
 const pts = (values: number[], dt = 1) => values.map((value, i) => ({ time: i * dt, value }));
 

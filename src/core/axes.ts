@@ -4,6 +4,19 @@ import type { AxisConfig, AnyScale, Dimensions } from './types';
 
 type SVGGSelection = Selection<SVGGElement, unknown, null, undefined>;
 
+/** Least vertical space per y-axis tick label (px); closer than this the labels crowd */
+export const MIN_Y_TICK_SPACING_PX = 30;
+
+/**
+ * Tick count for a vertical axis: as many as fit at MIN_Y_TICK_SPACING_PX
+ * (at least 2), never more than the axis asks for (d3's default is 10). d3
+ * treats the count as a hint and may use a few more or fewer "nice" ticks.
+ */
+export function verticalTickCount(innerHeight: number, requested?: number): number {
+  const fit = Math.max(2, Math.floor(innerHeight / MIN_Y_TICK_SPACING_PX));
+  return Math.min(requested ?? 10, fit);
+}
+
 export function renderAxis(
   group: SVGGSelection,
   scale: AnyScale,
@@ -24,7 +37,13 @@ export function renderAxis(
 
   const generator = generators[config.position](scale as any);
 
-  if (config.tickCount != null) generator.ticks(config.tickCount);
+  const vertical = config.position === 'left' || config.position === 'right';
+  if (vertical) {
+    // Fewer ticks on short charts, so the y-axis labels never crowd
+    generator.ticks(verticalTickCount(dimensions.innerHeight, config.tickCount ?? undefined));
+  } else if (config.tickCount != null) {
+    generator.ticks(config.tickCount);
+  }
   if (config.tickFormat) generator.tickFormat(config.tickFormat as any);
 
   group.call(generator as any);
@@ -71,6 +90,8 @@ export function renderGrid(
   config: { x?: boolean | { strokeColor?: string; opacity?: number; dasharray?: string };
             y?: boolean | { strokeColor?: string; opacity?: number; dasharray?: string } } | undefined,
   dimensions: Dimensions,
+  /** The y-axis' own tick count, so horizontal grid lines sit on its labels */
+  yTickCount?: number,
 ): void {
   if (!config) {
     xGroup.selectAll('*').remove();
@@ -103,6 +124,7 @@ export function renderGrid(
   // Y grid (horizontal lines)
   if (config.y) {
     const yGen = axisLeft(scales.y as any)
+      .ticks(verticalTickCount(dimensions.innerHeight, yTickCount))
       .tickSize(-dimensions.innerWidth)
       .tickFormat(() => '');
 

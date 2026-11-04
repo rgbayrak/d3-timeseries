@@ -8,6 +8,7 @@ import type { LoadedDataset } from './data';
 import { drawHistogram, drawWaveform, metricColor } from './charts';
 import {
   availableMetrics,
+  channelName,
   esc,
   formatMetric,
   formatSeconds,
@@ -60,18 +61,19 @@ function participantHtml(table: ParticipantsTable | null, sub: string): string {
 function scanDetailsHtml(rows: QualityRow[]): string {
   const r = rows[0];
   const timing = TIMING_LABELS[r.timingStatus as TimingStatus] ?? `Timing: ${r.timingStatus || 'n/a'}`;
+  // Values as HTML: plain text escaped, channel names in the shared file-name style
   const kv: [string, string][] = [
-    ['subject', `sub-${r.sub}`],
-    ...(r.ses ? ([['session', `ses-${r.ses}`]] as [string, string][]) : []),
-    ['task', r.task],
-    ...(r.run ? ([['run', `run-${r.run}`]] as [string, string][]) : []),
-    ['sampling rate', `${r.samplingFrequency} Hz`],
-    ['duration', formatSeconds(r.durationS)],
-    ['samples', String(r.numSamples)],
-    ['channels', rows.map((x) => x.channel).join(', ')],
+    ['subject', esc(`sub-${r.sub}`)],
+    ...(r.ses ? ([['session', esc(`ses-${r.ses}`)]] as [string, string][]) : []),
+    ['task', esc(r.task)],
+    ...(r.run ? ([['run', esc(`run-${r.run}`)]] as [string, string][]) : []),
+    ['sampling rate', esc(`${r.samplingFrequency} Hz`)],
+    ['duration', esc(formatSeconds(r.durationS))],
+    ['samples', esc(String(r.numSamples))],
+    ['channels', rows.map((x) => channelName(x.channel)).join(' ')],
   ];
   let html = `<div class="kv-grid">${kv
-    .map(([k, v]) => `<div class="kv"><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></div>`)
+    .map(([k, v]) => `<div class="kv"><span class="k">${esc(k)}</span><span class="v">${v}</span></div>`)
     .join('')}</div>`;
   html += `<div class="badges"><span class="quality-badge timing-${esc(r.timingStatus)}">${esc(timing)}</span>`;
   for (const x of rows) {
@@ -142,9 +144,9 @@ export function createIndividualTab(
       if (keys.length === 0) continue;
       const section = document.createElement('section');
       section.innerHTML =
-        `<h4>${esc(r.channel)}</h4>` +
+        `<h4>${channelName(r.channel)}</h4>` +
         (tableKeys.length ? channelTableHtml(r, group, tableKeys) : '') +
-        `<div class="muted">Solid dark line: this scan. Dashed grey line: mean of all ${group.length} ${esc(r.channel)} recordings.</div>`;
+        `<div class="muted">Solid dark line: this scan. Dashed grey line: mean of all ${group.length} ${channelName(r.channel)} recordings.</div>`;
       const grid = document.createElement('div');
       grid.className = 'hist-grid';
       section.appendChild(grid);

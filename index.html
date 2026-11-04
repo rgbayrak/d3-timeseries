@@ -14,7 +14,7 @@
 
     #focus-chart,
     #context-chart {
-      max-width: 960px;
+      max-width: var(--page-width);
       margin: 0 auto;
     }
 
@@ -45,14 +45,14 @@
     }
 
     #controls {
-      max-width: 960px;
+      max-width: var(--page-width);
       margin: 0 auto 12px;
       display: flex;
       flex-direction: column;
       gap: 8px;
     }
 
-    /* Rows: 1 = scan/channel pickers, 2 = navigation + search, 3 = tools */
+    /* Rows: 1 = scan/channel pickers, 2 = auxiliary (stack + confound), 3 = navigation + search */
     .controls-row {
       display: flex;
       align-items: center;
@@ -61,7 +61,7 @@
     }
 
     #controls label {
-      font-size: 14px;
+      font-size: var(--fs-lg);
       display: flex;
       align-items: center;
       gap: 4px;
@@ -72,72 +72,27 @@
     }
 
     #loading {
-      font-size: 12px;
+      font-size: var(--fs-sm);
       color: var(--text-3);
     }
 
+    /* Badges on the "Now viewing" line, a little apart from the file name */
     #quality-badges {
-      max-width: 960px;
-      margin: 0 auto 8px;
-      display: flex;
+      display: inline-flex;
       gap: 8px;
       flex-wrap: wrap;
+      vertical-align: middle;
+      margin-left: 16px;
     }
 
-    .quality-badge {
-      font-size: 12px;
-      padding: 2px 8px;
-      border-radius: 10px;
-      font-weight: 600;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .quality-badge.pass {
-      background: #e6f4ea;
-      color: #1e7e34;
-      border: 1px solid #b7e1c4;
-    }
-
-    .quality-badge.fail {
-      background: #fce8e6;
-      color: #c62828;
-      border: 1px solid #f5b7b1;
-    }
-
-    .quality-badge.timing-verified {
-      background: #e6f4ea;
-      color: #1e7e34;
-      border: 1px solid #b7e1c4;
-    }
-
-    .quality-badge.timing-corrected,
-    .quality-badge.timing-unverified {
-      background: #fff4e5;
-      color: #8a5a00;
-      border: 1px solid #f3d19e;
-    }
-
-    .quality-badge.timing-mismatch {
-      background: #fce8e6;
-      color: #c62828;
-      border: 1px solid #f5b7b1;
-    }
-
-    .quality-badge[title] {
-      cursor: help;
-    }
-
-    .quality-badge .pct {
-      font-weight: 400;
-      opacity: 0.8;
+    #quality-badges:empty {
+      display: none;
     }
 
     /* Charts (3/4) left, Annotations (1/4) right; on narrow screens left first, then right.
        The charts resize to their column, all to the same width, so time axes still line up. */
     .explore-layout {
-      max-width: 960px;
+      max-width: var(--page-width);
       margin: 0 auto;
       display: grid;
       grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
@@ -155,6 +110,126 @@
       }
     }
 
+    /* Scatter plot of two metrics across all recordings, full width below the charts and Annotations */
+    /* One text style for everything in this section under its heading: description,
+       menu labels, dropdowns, legend and the "n of N scans plotted" note */
+    #scatter-section {
+      max-width: var(--page-width);
+      margin: 24px auto 0;
+      font-size: var(--fs-md);
+      color: var(--text);
+    }
+
+    #scatter-section .muted,
+    #scatter-section label,
+    #scatter-section select {
+      font-size: inherit;
+      color: inherit;
+    }
+
+    /* Short divider before the section, same as the other sections */
+    #scatter-section::before {
+      content: '';
+      display: block;
+      width: 48px;
+      height: 2px;
+      margin-bottom: 18px;
+      background: #c9c9d3;
+      border-radius: 1px;
+    }
+
+    #scatter-section h3 {
+      margin: 0 0 8px;
+    }
+
+    .scatter-controls {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 8px 0;
+    }
+
+    .scatter-controls label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    #scatter-chart {
+      width: 100%;
+    }
+
+    /* Legend and "n of N scans plotted", right under the plot's description */
+    /* Colour legend and "n of N scans plotted", in the menu row right after Colour by,
+       set off by a thin line so it reads as that menu's key */
+    .scatter-key {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 16px;
+      padding-left: 16px;
+      border-left: 1px solid #ddd;
+    }
+
+    #scatter-legend {
+      display: flex;
+      gap: 6px 18px;
+      flex-wrap: wrap;
+    }
+
+    /* "Session: ● 01 ● 02": what the colours mean, then each group */
+    .legend-group {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 12px;
+    }
+
+    /* "Session:" in the same text as the rest; the colon and the swatches mark it as the key */
+    .legend-title {
+      color: inherit;
+    }
+
+    /* The viewed scan's point, set apart from the groups */
+    .legend-viewed {
+      padding-left: 18px;
+      border-left: 1px solid #ddd;
+    }
+
+    .legend-group:first-child.legend-viewed {
+      padding-left: 0;
+      border-left: none;
+    }
+
+    #scatter-legend:empty {
+      display: none;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Legend swatch: same colours as the scatter dots */
+    .swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    /* Message in place of the scatter plot (no values to plot) */
+    .empty {
+      font-size: inherit;
+      color: inherit;
+      padding: 40px 0;
+      text-align: center;
+      background: #f5f6f8;
+      border-radius: 10px;
+    }
+
     /* Annotations box: Full Recording, then Time Windows below it */
     #annotation-section {
       box-sizing: border-box;
@@ -165,6 +240,18 @@
 
     #annotation-section h3 {
       margin: 0 0 10px;
+    }
+
+    /* How saving works, under the Annotations box */
+    .annotation-note {
+      margin: 0 0 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #e6e6e6; /* sets it apart from A. Full Recording */
+      font-size: var(--fs-sm);
+      line-height: 1.45;
+      color: var(--text-3);
+      text-align: justify; /* fill the box's width, both edges straight */
+      hyphens: auto;
     }
 
     .annotation-cols {
@@ -189,7 +276,7 @@
     .field-label {
       display: block;
       margin-bottom: 4px;
-      font-size: 12px;
+      font-size: var(--fs-sm);
       font-weight: 600;
       color: var(--text-2);
     }
@@ -207,13 +294,18 @@
       width: 100%;
       margin: 0;
       padding: 6px 8px;
-      font-size: 13px;
+      font-size: var(--fs-md);
       line-height: 1.4;
       resize: vertical;
     }
 
+    /* Annotate: On/Off, above the list of time windows */
+    .annotate-mode-btn {
+      margin-bottom: 8px;
+    }
+
     .annotation-empty {
-      font-size: 12px;
+      font-size: var(--fs-sm);
       color: var(--text-3);
     }
 
@@ -221,7 +313,7 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      font-size: 12px;
+      font-size: var(--fs-sm);
       padding: 4px 8px;
       border: 1px solid #f0c9a0;
       background: #fdf3e7;
@@ -230,7 +322,7 @@
     }
 
     .annotation-range {
-      font-family: monospace;
+      font-family: var(--mono);
       color: #b5651d;
       white-space: nowrap;
     }
@@ -247,7 +339,7 @@
       border: none;
       background: transparent;
       color: #a33;
-      font-size: 14px;
+      font-size: var(--fs-lg);
       line-height: 1;
       padding: 0 4px;
     }
@@ -258,12 +350,12 @@
 
     /* Section labels above the main channel and the auxiliary charts (lettering from tabs.css) */
     .section-label {
-      max-width: 960px;
+      max-width: var(--page-width);
       margin: 0 auto 6px;
     }
 
     #auxiliary-section {
-      max-width: 960px;
+      max-width: var(--page-width);
       margin: 12px auto 0;
     }
 
@@ -279,7 +371,7 @@
     }
 
     #confounds-section {
-      max-width: 960px;
+      max-width: var(--page-width);
       margin: 0 auto;
     }
 
@@ -293,12 +385,25 @@
     }
 
     #confounds-chart {
-      max-width: 960px;
+      max-width: var(--page-width);
     }
 
     /* Stacked channel picker (controls row) */
+    /* Auxiliary row: "Auxiliary Signal Options:", then Confound, then Stack,
+       in the same text as the other control labels (Subject, Channel, …) */
+    .aux-title {
+      font-size: var(--fs-lg);
+      color: var(--text);
+    }
+
+    .aux-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
     .stack-title {
-      font-size: 14px;
+      font-size: var(--fs-lg);
     }
 
     #stack-channels {
@@ -314,20 +419,20 @@
 
     /* Stacked channel figures, one per checked channel */
     #stack-section {
-      max-width: 960px;
+      max-width: var(--page-width);
       margin: 0 auto;
     }
 
     #stack-section .stack-chart {
-      max-width: 960px;
+      max-width: var(--page-width);
     }
   </style>
 </head>
 <body>
   <nav class="folder-tabs" aria-label="Sections">
     <a class="folder-tab active" href="/" aria-current="page">Explore and Annotate</a>
-    <a class="folder-tab" href="/quality.html#group">Stats Group</a>
-    <a class="folder-tab" href="/quality.html#subject">Stats Individual</a>
+    <!-- Shown once the dataset's quality metrics are found (src/viewer/main.ts) -->
+    <a id="stats-tab" class="folder-tab" href="/quality.html" style="display:none">Stats</a>
   </nav>
   <div id="dataset-info" class="dataset-header"></div>
   <div id="controls">
@@ -337,11 +442,15 @@
       <label>Task <select id="task-select"></select></label>
       <label id="run-label" style="display:none">Run <select id="run-select"></select></label>
       <label>Channel <select id="channel-select"></select></label>
-      <label id="confound-label" style="display:none">Confound <select id="confound-select"></select></label>
     </div>
-    <div class="controls-row" id="stack-row" style="display:none">
-      <span class="stack-title">Stack</span>
-      <span id="stack-channels"></span>
+    <!-- What the Auxiliary charts below show; each part, and the row, hides when there is nothing to pick -->
+    <div class="controls-row" id="aux-row" style="display:none">
+      <span class="aux-title">Auxiliary Signal Options:</span>
+      <label id="confound-label" class="aux-item" style="display:none">Confound <select id="confound-select"></select></label>
+      <span id="stack-row" class="aux-item" style="display:none">
+        <span class="stack-title">Stack</span>
+        <span id="stack-channels"></span>
+      </span>
     </div>
     <div class="controls-row">
       <button id="prev-btn" class="btn" type="button" title="Previous scan (←)">&laquo; Prev</button>
@@ -349,12 +458,9 @@
       <input id="search-input" type="text" placeholder="e.g. sub-03 or ses-012">
       <span id="loading"></span>
     </div>
-    <div class="controls-row">
-      <button id="annotate-mode-btn" class="btn" type="button">Annotate: Off</button>
-    </div>
   </div>
-  <div class="now-viewing"><span class="now-viewing-label">Now viewing:</span> <span id="filename" class="now-viewing-file"></span><span id="annotation-progress" class="annotation-progress" title="Scans with a signal quality rating, notes or time windows saved for this channel"></span></div>
-  <div id="quality-badges"></div>
+  <!-- File name, then a little apart the timing check and sidecar pass/fail badges -->
+  <div class="now-viewing"><span class="now-viewing-label">Now viewing:</span> <span id="filename" class="now-viewing-file"></span><span id="quality-badges"></span></div>
   <!-- Charts (3/4) on the left, Annotations (1/4) on the right; stacked left then right on narrow screens -->
   <div class="explore-layout">
   <div class="explore-main">
@@ -375,9 +481,23 @@
   <!-- Annotations box: Full Recording (signal quality, notes), then Time Windows -->
   <section id="annotation-section" aria-labelledby="annotations-title">
     <h3 id="annotations-title">Annotations</h3>
+    <!-- How many scans are annotated for the channel shown; filled in by src/viewer/main.ts -->
+    <div class="annotation-progress" title="Scans with a signal quality rating, notes or time windows saved for this channel">
+      <div id="annotation-progress" class="annotation-progress-text"></div>
+      <div class="progress-track" role="progressbar" aria-labelledby="annotation-progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div id="annotation-progress-bar" class="progress-fill"></div>
+      </div>
+    </div>
+    <p class="annotation-note">
+      All changes are saved automatically.
+      A new Signal Quality choice replaces the previous one (click it again to clear it).
+      Notes are saved as you type.
+      A new time window is added next to the existing ones, even if they overlap; remove one with &times;.
+    </p>
+
     <div class="annotation-cols">
       <div class="annotation-col">
-        <h4>Full Recording</h4>
+        <h4>A. Full Recording</h4>
         <div class="annotation-field">
           <div class="field-label" id="signal-quality-label">Signal Quality</div>
           <div id="waveform-quality" class="waveform-quality" role="group" aria-labelledby="signal-quality-label">
@@ -393,13 +513,32 @@
         </div>
       </div>
       <div class="annotation-col">
-        <h4>Time Windows</h4>
+        <h4>B. Time Windows</h4>
+        <!-- When on, dragging on the top chart marks a time window instead of zooming -->
+        <button id="annotate-mode-btn" class="btn annotate-mode-btn" type="button" title="When on, drag on the top chart to mark a time window">Annotate: Off</button>
         <div id="annotation-list"></div>
       </div>
     </div>
   </section>
   </aside>
   </div>
+
+  <!-- Every recording of one channel; shown only when the dataset's quality metrics are computed (src/viewer/main.ts) -->
+  <section id="scatter-section" style="display:none" aria-labelledby="scatter-title">
+    <h3 id="scatter-title">Compare two metrics across all recordings</h3>
+    <div class="muted">One point per recording of the channel chosen at the top of the page. X can also be a participant variable (age, sex, …) from participants.tsv. Hover a point for details; double-click it to open that scan in Stats.</div>
+    <!-- Menus, then right next to Colour by its colour legend and how many scans are plotted -->
+    <div class="scatter-controls">
+      <label>Y <select id="scatter-y"></select></label>
+      <label>X <select id="scatter-x"></select></label>
+      <label>Colour by <select id="scatter-color"></select></label>
+      <div class="scatter-key">
+        <div id="scatter-legend" aria-label="Colour legend"></div>
+        <div id="scatter-note" class="muted"></div>
+      </div>
+    </div>
+    <div id="scatter-chart"></div>
+  </section>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

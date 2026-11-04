@@ -45,6 +45,12 @@ export const TSV_HEADER: string[] = [...SCAN_COLUMNS, ...METRIC_COLUMNS.map((c) 
 export const METRICS_TSV_NAME = 'quality_metrics.tsv';
 export const DATASET_JSON_NAME = 'dataset.json';
 export const WAVEFORMS_DIR = 'waveforms';
+/**
+ * PDF report next to the metrics. The compute script deletes it (it describes
+ * the old metrics); the Stats tab builds it again the next time it opens and
+ * the dev server saves it here (/api/quality-report).
+ */
+export const REPORT_PDF_NAME = 'quality_report.pdf';
 
 export interface ScanKeyLike {
   sub: string;

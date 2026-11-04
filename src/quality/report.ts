@@ -1,18 +1,17 @@
 import type { ChartInstance } from '@/core';
 import { TIMING_LABELS, bareDoi } from '@/viewer/info';
 import type { TimingStatus } from '@/data/bids-physio-reader';
-import { drawScatter, drawHistogram, drawWaveform, metricColor, PALETTE, THEME } from './charts';
+import { drawScatter, drawWaveform, PALETTE, THEME } from './charts';
 import { buildPdf, A4_LANDSCAPE } from './pdf';
 import type { PdfPageImage } from './pdf';
 import { fetchWaveforms } from './data';
 import type { LoadedDataset } from './data';
 import { scanId } from './metrics-tsv';
 import type { DatasetInfoLike, ParticipantsTable } from './metrics-tsv';
-import type { GroupSelection } from './group-tab';
-import type { VisibleMetrics } from './model';
+import type { ColorBy } from './model';
 import {
-  ALL_METRICS,
   colorByLabel,
+  colorByOptions,
   availableMetrics,
   categoryLabel,
   colorGroups,
@@ -23,7 +22,6 @@ import {
   formatSeconds,
   metricAxisChoices,
   metricDef,
-  metricAxisLabel,
   ordinal,
   participantValue,
   rowsForChannel,
@@ -119,11 +117,6 @@ interface TextStyle {
   bold?: boolean;
   mono?: boolean;
   color?: string;
-}
-
-/** One histogram in the PDF grid (no title: the x-axis label names the metric) */
-export interface HistCell {
-  img: HTMLImageElement | null;
 }
 
 /** Top-to-bottom flow layout over A4-landscape pages; finished pages are encoded straight away */
@@ -249,29 +242,6 @@ function createLayout(footer: string) {
     y += 16;
   }
 
-  async function histGrid(cells: HistCell[], columns = 4) {
-    const gap = 14;
-    const cw = (CONTENT_W - gap * (columns - 1)) / columns;
-    for (let i = 0; i < cells.length; i += columns) {
-      const row = cells.slice(i, i + columns);
-      // Histograms with an axis label are a little taller; size the row to its tallest image
-      const ih = Math.max(cw / 2, ...row.map((cell) => (cell.img ? heightAt(cell.img, cw) : 0)));
-      const ch = ih + 10;
-      const c = await room(ch);
-      row.forEach((cell, j) => {
-        const x = MARGIN + j * (cw + gap);
-        if (cell.img) {
-          c.drawImage(cell.img, x, y, cw, heightAt(cell.img, cw));
-        } else {
-          c.fillStyle = '#666';
-          c.font = `8px ${FONT}`;
-          c.fillText('No values', x, y + 18);
-        }
-      });
-      y += ch;
-    }
-  }
-
   async function table(header: string[], rows: string[][], firstColWidth = 150) {
     const rh = 13;
     const rest = header.length > 1 ? (CONTENT_W - firstColWidth) / (header.length - 1) : 0;
@@ -304,7 +274,6 @@ function createLayout(footer: string) {
     heading,
     image,
     legend,
-    histGrid,
     table,
     newPage,
     finish,
@@ -346,18 +315,16 @@ function participantLine(table: ParticipantsTable | null, sub: string): string {
 export interface ReportOptions {
   dataset: string;
   data: LoadedDataset;
-  /** Axes and colouring from the Group tab, applied to every channel's scatter */
-  selection: GroupSelection;
-  /** Add one page per scan (waveforms and metrics) */
-  includeScans: boolean;
-  /** Metrics chosen in the Metrics picker; hidden ones are left out of the report */
-  visible: VisibleMetrics;
   onProgress?: (message: string) => void;
 }
 
-/** Build the whole-dataset PDF report */
+/**
+ * Build the whole-dataset PDF report: summary, one scatter page per channel,
+ * then one page per scan with its waveforms and every metric. It is saved once
+ * per computed dataset, so it never depends on what is ticked on screen.
+ */
 export async function buildQualityReport(opts: ReportOptions): Promise<Blob> {
-  const { dataset, data, selection, includeScans, visible } = opts;
+  const { dataset, data } = opts;
   const progress = opts.onProgress ?? (() => {});
   const s = data.summary;
   const participants = s.participants;
@@ -387,11 +354,13 @@ export async function buildQualityReport(opts: ReportOptions): Promise<Blob> {
       );
     }
     L.gap(6);
-    const colour = selection.colorBy === 'none' ? 'one colour' : `colour = ${colorByLabel(selection.colorBy).toLowerCase()}`;
+    // Scatter plots use each channel's default metric pair and the first Colour by choice the dataset has
+    const colorChoices = colorByOptions(data.rows);
+    const colorBy: ColorBy = colorChoices.length > 0 ? colorChoices[0].key : 'none';
+    const colour = colorBy === 'none' ? 'one colour' : `colour = ${colorByLabel(colorBy).toLowerCase()}`;
     await L.text(
-      `Contents: one section per channel with a scatter plot (${colour}) and the ` +
-        `distribution of ${visible.size === ALL_METRICS.length ? 'every metric' : `the ${visible.size} selected metrics`}` +
-        (includeScans ? ', then one page per scan with its waveforms and metrics (percentile among all recordings of the same channel).' : '.'),
+      `Contents: one page per channel with a scatter plot (${colour}), then one page per scan with its ` +
+        'waveforms and every metric (percentile among all recordings of the same channel).',
       9,
       { color: '#444' },
     );
@@ -403,26 +372,27 @@ export async function buildQualityReport(opts: ReportOptions): Promise<Blob> {
       await L.newPage();
       await L.heading(`${channel}: quality across all recordings`, 15, 0);
       const rows = rowsForChannel(data.rows, channel);
-      if (metricAxisChoices(rows, visible).length === 0) {
+      if (metricAxisChoices(rows).length === 0) {
         await L.text('No metrics to show for this channel.', 10);
         continue;
       }
-      // Same options as the Group tab; a choice this channel lacks falls back to the default pair
+      // Each channel's default metric pair, from every metric with values (as in the
+      // scatter plot on Explore and Annotate)
       const units = s.channelUnits;
-      const xChoices = xAxisChoices(rows, participants, data.rows, visible, units);
-      const yChoices = yAxisChoices(rows, visible, units);
-      const [dx, dy] = defaultMetricPair(rows, visible);
-      const xc = xChoices.find((c) => c.value === selection.xValue) ?? xChoices.find((c) => c.value === dx) ?? xChoices[0];
-      const yc = yChoices.find((c) => c.value === selection.yValue) ?? yChoices.find((c) => c.value === dy) ?? yChoices[0];
+      const xChoices = xAxisChoices(rows, participants, data.rows, units);
+      const yChoices = yAxisChoices(rows, units);
+      const [dx, dy] = defaultMetricPair(rows);
+      const xc = xChoices.find((c) => c.value === dx) ?? xChoices[0];
+      const yc = yChoices.find((c) => c.value === dy) ?? yChoices[0];
 
-      // Same colour per category in every channel's scatter, matching the Stats Group tab
-      const allGroups = colorGroups(data.rows, selection.colorBy);
+      // Same colour per category in every channel's scatter
+      const allGroups = colorGroups(data.rows, colorBy);
       const colorOf = (g: string) => PALETTE[allGroups.indexOf(g) % PALETTE.length];
-      const groups = colorGroups(rows, selection.colorBy);
+      const groups = colorGroups(rows, colorBy);
       const points = scatterData(rows, xc, yc, participants).map((d) => ({
         x: d.x,
         y: d.y,
-        color: colorOf(colorKey(d.row, selection.colorBy)),
+        color: colorOf(colorKey(d.row, colorBy)),
         datum: d.row,
       }));
       await L.text(`${yc.label} against ${xc.label}: ${points.length} of ${rows.length} scans plotted.`, 9, { color: '#444' });
@@ -439,29 +409,16 @@ export async function buildQualityReport(opts: ReportOptions): Promise<Blob> {
           }),
         );
         if (img) await L.image(img, CONTENT_W, heightAt(img, CONTENT_W));
-        await L.legend(groups.map((g) => ({ label: g, color: colorOf(g) })));
+        if (colorBy !== 'none') {
+          // Say what the colours mean, as on the page: "Colour by session:"
+          await L.text(`Colour by ${colorByLabel(colorBy).toLowerCase()}:`, 8, { color: '#444' });
+          await L.legend(groups.map((g) => ({ label: g, color: colorOf(g) })));
+        }
       }
-
-      await L.heading(`How each ${channel} metric is distributed`, 11, 140);
-      await L.text('Dashed grey line: group mean.', 8, { color: '#666' });
-      const cells: HistCell[] = [];
-      for (const key of availableMetrics(rows, visible)) {
-        const values = rows.map((r) => r.metrics[key]);
-        const img = await renderChart(host, (el) =>
-          drawHistogram({
-            container: el,
-            values,
-            color: metricColor(key),
-            xLabel: metricAxisLabel(key, channel, units),
-          }),
-        );
-        cells.push({ img });
-      }
-      await L.histGrid(cells);
     }
 
     // One page per scan
-    if (includeScans) {
+    {
       const scans = uniqueScans(data.rows);
       for (const [i, scan] of scans.entries()) {
         progress(`scan ${i + 1} of ${scans.length}`);
@@ -507,7 +464,7 @@ export async function buildQualityReport(opts: ReportOptions): Promise<Blob> {
           await L.text('No waveform file for this scan.', 9, { color: '#a33' });
         }
 
-        const keys = availableMetrics(scanRows, visible);
+        const keys = availableMetrics(scanRows);
         if (keys.length > 0) {
           L.gap(4);
           const header = ['Metric', ...scanRows.map((r) => r.channel)];
