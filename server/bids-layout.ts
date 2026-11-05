@@ -5,8 +5,17 @@ import { join, dirname, basename } from 'path';
 /** Matches physio .tsv.gz files (both _physio.tsv.gz and _desc-preproc_physio.tsv.gz) */
 const PHYSIO_GZ_RE = /_physio\.tsv\.gz$/;
 
-/** Matches confounds TSV files from fmriprep (plain or gzipped) */
-const CONFOUNDS_RE = /_desc-confounds_timeseries\.tsv(\.gz)?$/;
+/**
+ * Per-volume confounds TSVs (plain or gzipped), in order of preference:
+ * fMRIPrep ≥ 20.2, fMRIPrep 1.4–20.1, fMRIPrep < 1.4, then MRIQC's
+ * *_timeseries.tsv (same column names: framewise_displacement, rot_x, …).
+ */
+const CONFOUNDS_PATTERNS = [
+  /_desc-confounds_timeseries\.tsv(\.gz)?$/,
+  /_desc-confounds_regressors\.tsv(\.gz)?$/,
+  /_bold_confounds\.tsv(\.gz)?$/,
+  /_timeseries\.tsv(\.gz)?$/,
+];
 
 /** Motion/intensity confound columns exposed to the viewer, in dropdown order */
 export const CONFOUND_COLUMNS = [
@@ -361,8 +370,9 @@ interface BoldTiming {
 }
 
 /**
- * TR and volume onsets from the BOLD sidecar: scan-level raw sidecar, then
- * top-level task inheritance, then the derivatives' BOLD sidecars.
+ * TR and volume onsets from the BOLD sidecar: scan-level raw sidecar (exact
+ * name, then e.g. per-echo names), then top-level task inheritance, then the
+ * derivatives' BOLD sidecars.
  * Returns null if no timing is found.
  */
 function readBoldTiming(
@@ -373,10 +383,16 @@ function readBoldTiming(
   prefix: string,
   task: string,
 ): BoldTiming | null {
-  const candidates = [
-    join(funcDir(bidsRoot, sub, ses), `${prefix}_bold.json`),
-    join(bidsRoot, `task-${task}_bold.json`),
-  ];
+  const rawFd = funcDir(bidsRoot, sub, ses);
+  const candidates = [join(rawFd, `${prefix}_bold.json`)];
+  // Other raw sidecars of the run, e.g. multi-echo …_run-1_echo-1_bold.json
+  if (existsSync(rawFd)) {
+    const others = readdirSync(rawFd)
+      .filter((f) => matchesPrefix(f, prefix) && f.endsWith('_bold.json'))
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    for (const f of others) candidates.push(join(rawFd, f));
+  }
+  candidates.push(join(bidsRoot, `task-${task}_bold.json`));
   const derFd = funcDir(bidsderRoot, sub, ses);
   if (existsSync(derFd)) {
     for (const f of readdirSync(derFd)) {
@@ -398,13 +414,22 @@ function readBoldTiming(
   return null;
 }
 
+/**
+ * The scan's confounds file in the derivatives func folder: the first readable
+ * match of the most preferred CONFOUNDS_PATTERNS entry. Multi-echo runs
+ * (…_echo-1_…, …_echo-2_…) share their motion, so the lowest echo is used.
+ */
 function findConfoundsFile(bidsderRoot: string, sub: string, ses: string, prefix: string): string | null {
   const fd = funcDir(bidsderRoot, sub, ses);
   if (!existsSync(fd)) return null;
-  const name = readdirSync(fd).find((f) => matchesPrefix(f, prefix) && CONFOUNDS_RE.test(f));
-  if (!name) return null;
-  const path = join(fd, name);
-  return isReadable(path) ? path : null;
+  const files = readdirSync(fd)
+    .filter((f) => matchesPrefix(f, prefix))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  for (const pattern of CONFOUNDS_PATTERNS) {
+    const name = files.find((f) => pattern.test(f) && isReadable(join(fd, f)));
+    if (name) return join(fd, name);
+  }
+  return null;
 }
 
 function readConfoundsText(path: string): string {
@@ -461,6 +486,72 @@ export function readConfounds(
     volumeTimes,
     columns,
   };
+}
+
+/**
+ * The scan's BIDS events file, following BIDS inheritance: the run's own file
+ * in the imaging func folder, then the run-less file there (it applies to
+ * every run), then a top-level task-<task>_events.tsv. Null if there is none.
+ */
+function findEventsFile(imagingRoot: string, sub: string, ses: string, task: string, run: string): string | null {
+  const fd = funcDir(imagingRoot, sub, ses);
+  const files = existsSync(fd) ? readdirSync(fd).filter((f) => f.endsWith('_events.tsv')) : [];
+
+  /** Events file for `prefix` in fd; a run-less prefix never picks up a run's file */
+  const inFuncDir = (prefix: string, withRun: boolean): string | null => {
+    const candidates = files.filter((f) => matchesPrefix(f, prefix));
+    const name =
+      candidates.find((f) => f === `${prefix}_events.tsv`) ??
+      candidates.find((f) => withRun || !/_run-/.test(f.slice(prefix.length)));
+    return name ? join(fd, name) : null;
+  };
+
+  const candidates = [
+    run ? inFuncDir(scanPrefix(sub, ses, task, run), true) : null,
+    inFuncDir(scanPrefix(sub, ses, task, ''), false),
+    join(imagingRoot, `task-${task}_events.tsv`),
+  ];
+  return candidates.find((p): p is string => p !== null && isReadable(p)) ?? null;
+}
+
+/**
+ * Task events (BIDS *_events.tsv): onset and duration in seconds from the
+ * first volume (the viewer's t = 0), plus every other column as text. Rows
+ * without a numeric onset are dropped; an n/a duration counts as 0.
+ * Read from the imaging folders only (see imagingRootOf), never from physprep/.
+ */
+export function readEvents(imagingRoot: string, sub: string, ses: string, task: string, run: string) {
+  const filePath = findEventsFile(imagingRoot, sub, ses, task, run);
+  if (!filePath) return null;
+
+  const lines = readFileSync(filePath, 'utf-8')
+    .split(/\r?\n/)
+    .filter((l) => l.trim().length > 0);
+  if (lines.length < 2) return null;
+
+  const headers = lines[0].split('\t').map((h) => h.trim());
+  const onsetIdx = headers.indexOf('onset');
+  if (onsetIdx < 0) return null;
+  const durationIdx = headers.indexOf('duration');
+  const other = headers.filter((h, i) => i !== onsetIdx && i !== durationIdx && h.length > 0);
+
+  const onset: number[] = [];
+  const duration: number[] = [];
+  const columns: Record<string, string[]> = {};
+  for (const c of other) columns[c] = [];
+
+  for (const line of lines.slice(1)) {
+    const row = line.split('\t').map((v) => v.trim());
+    const t = Number(row[onsetIdx]);
+    if (row[onsetIdx] === '' || !Number.isFinite(t)) continue;
+    const d = durationIdx >= 0 ? Number(row[durationIdx]) : 0;
+    onset.push(t);
+    duration.push(Number.isFinite(d) && d > 0 ? d : 0);
+    for (const c of other) columns[c].push(row[headers.indexOf(c)] ?? 'n/a');
+  }
+  if (onset.length === 0) return null;
+
+  return { filename: basename(filePath), onset, duration, columns };
 }
 
 export interface StoredAnnotation {
@@ -614,6 +705,16 @@ export function resolveBidsRoots(root: string, derivOverride?: string): { bidsRo
   const candidates = [join(bidsRoot, 'derivatives', 'fmriprep')];
   if (basename(bidsRoot) === 'physprep') candidates.push(join(dirname(bidsRoot), 'fmriprep'));
   return { bidsRoot, derivRoot: candidates.find((c) => existsSync(c)) ?? candidates[0] };
+}
+
+/**
+ * Root of the imaging data (the func folders holding *_bold.nii.gz), where task
+ * events live. In a physprep layout (data/shinobi/physprep next to the imaging
+ * folders) that is the parent of physprep/, so events copied into physprep/
+ * are not used; for plain BIDS it is the dataset root itself.
+ */
+export function imagingRootOf(bidsRoot: string): string {
+  return basename(bidsRoot) === 'physprep' ? dirname(bidsRoot) : bidsRoot;
 }
 
 export function buildScans(bidsRoot: string, subjects: SubjectInfo[]): ScanEntry[] {
