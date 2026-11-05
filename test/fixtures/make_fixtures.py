@@ -110,6 +110,29 @@ def confounds_tsv() -> str:
     return "\n".join(lines) + "\n"
 
 
+def mriqc_timeseries_tsv(fd_step: float) -> str:
+    """MRIQC *_timeseries.tsv: fMRIPrep column names plus a non-motion column; FD and DVARS start with n/a."""
+    header = ["aor", "dvars", "framewise_displacement", "trans_x", "rot_x"]
+    lines = ["\t".join(header)]
+    for k in range(N_VOLUMES):
+        dvars = "n/a" if k == 0 else f"{10 + k:.1f}"
+        fd = "n/a" if k == 0 else f"{fd_step * k:.3f}"
+        lines.append("\t".join(["0.01", dvars, fd, f"{0.01 * k:.3f}", f"{0.001 * k:.4f}"]))
+    return "\n".join(lines) + "\n"
+
+
+def events_tsv() -> str:
+    """BIDS events: onset/duration plus trial_type (categorical) and response_time (numeric)."""
+    rows = [
+        ["onset", "duration", "trial_type", "response_time"],
+        ["0.0", "4.0", "left", "0.52"],
+        ["6.0", "4.0", "right", "n/a"],
+        ["12.0", "n/a", "left", "0.61"],
+        ["n/a", "4.0", "right", "0.48"],
+    ]
+    return "\n".join("\t".join(r) for r in rows) + "\n"
+
+
 # ---------------------------------------------------------------- datasets
 
 def make_sessions(root: Path) -> None:
@@ -186,6 +209,12 @@ def make_nosessions(root: Path) -> None:
     write_json(func1 / "sub-01_task-motor_desc-quality.json", {
         "cardiac": {"QualityAssessment": "Pass", "PercentageValid": 1.0},
     })
+    # Task events: two trial types, a numeric column, an n/a duration and a row without onset
+    write_text(func1 / "sub-01_task-motor_events.tsv", events_tsv())
+    # MRIQC derivatives for a multi-echo run: one timeseries per echo (echo-1 is used)
+    mriqc_func1 = root / "derivatives" / "mriqc" / "sub-01" / "func"
+    write_text(mriqc_func1 / "sub-01_task-motor_echo-1_timeseries.tsv", mriqc_timeseries_tsv(0.05))
+    write_text(mriqc_func1 / "sub-01_task-motor_echo-2_timeseries.tsv", mriqc_timeseries_tsv(0.5))
 
     # sub-02: top-level physio.json, no trigger
     write_gz(root / "sub-02" / "func" / "sub-02_task-motor_physio.tsv.gz", physio_tsv(None))

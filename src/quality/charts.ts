@@ -67,6 +67,12 @@ const GROUP_PALETTE = [
 ];
 export const PALETTE = [...GROUP_PALETTE, ...Object.values(FAMILY).filter((c) => !GROUP_PALETTE.includes(c))];
 
+/**
+ * Ten categories (the events figure's lanes): PALETTE, then darker shades of
+ * blue, teal, orange and magenta from the same family.
+ */
+export const CATEGORY_PALETTE = [...PALETTE, '#2a4a80', '#2b7a76', '#9a4a1e', '#7a3466'];
+
 /** This scan's marker on the group histograms: dark ink (with a white halo), clear against every metric colour */
 const SUBJECT_COLOR = THEME.ink;
 /** Group-mean line on the histograms: dashed grey */

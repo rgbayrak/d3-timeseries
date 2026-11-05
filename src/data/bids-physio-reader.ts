@@ -141,6 +141,22 @@ export async function fetchConfounds(
   return res.json();
 }
 
+export interface EventsRaw {
+  filename: string;
+  /** Event onsets (s) from the first volume, on the same axis as the physio signal */
+  onset: number[];
+  /** Event durations (s); 0 when n/a */
+  duration: number[];
+  /** Every other events column (e.g. trial_type) → one text value per event */
+  columns: Record<string, string[]>;
+}
+
+export async function fetchEvents(sub: string, ses: string, task: string, run: string): Promise<EventsRaw | null> {
+  const res = await fetch(`/api/bids/events?sub=${sub}&ses=${ses}&task=${task}&run=${run}`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
 /**
  * Convert one confound column to DataPoints on the scan-onset time axis
  * (t = 0 at the first volume, same axis as the physio signal).

@@ -8,6 +8,8 @@ import {
   getRuns,
   readPhysio,
   readConfounds,
+  readEvents,
+  imagingRootOf,
   readAnnotations,
   writeAnnotations,
   buildScans,
@@ -174,15 +176,33 @@ export function bidsPhysioPlugin(): Plugin {
           }
           if (rejectInvalid(res, { sub, ses, task, run })) return;
 
+          // Many scans have no fMRIPrep confounds: that is not an error, so
+          // reply null (200) rather than 404, which the browser logs as a failure
           const result = readConfounds(BIDS_ROOT, BIDSDER_ROOT, sub, ses, task, run);
-          if (!result) {
-            res.statusCode = 404;
-            res.end(JSON.stringify({ error: 'Confounds file not found' }));
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(result ?? null));
+          return;
+        }
+
+        if (req.url?.startsWith('/api/bids/events')) {
+          const url = new URL(req.url, 'http://localhost');
+          const sub = url.searchParams.get('sub');
+          const ses = url.searchParams.get('ses') ?? '';
+          const task = url.searchParams.get('task');
+          const run = url.searchParams.get('run') ?? '';
+
+          if (!sub || !task) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: 'Missing sub or task parameter' }));
             return;
           }
+          if (rejectInvalid(res, { sub, ses, task, run })) return;
 
+          // Events sit with the imaging data (*_bold.nii.gz), not in physprep/.
+          // No events file (e.g. rest) is not an error: reply null (200), not 404
+          const result = readEvents(imagingRootOf(BIDS_ROOT), sub, ses, task, run);
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify(result));
+          res.end(JSON.stringify(result ?? null));
           return;
         }
 

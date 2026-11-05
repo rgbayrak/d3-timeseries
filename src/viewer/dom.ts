@@ -8,6 +8,9 @@ export interface ViewerElements {
   channelSelect: HTMLSelectElement;
   confoundSelect: HTMLSelectElement;
   confoundLabel: HTMLLabelElement;
+  /** Events column dropdown and its "Event" label in the Auxiliary row */
+  eventsSelect: HTMLSelectElement;
+  eventsLabel: HTMLLabelElement;
   prevBtn: HTMLButtonElement;
   nextBtn: HTMLButtonElement;
   searchInput: HTMLInputElement;
@@ -21,17 +24,21 @@ export interface ViewerElements {
   loading: HTMLElement;
   confoundsSection: HTMLElement;
   confoundsLabel: HTMLElement;
+  /** Events figure: its section, file name and colour key */
+  eventsSection: HTMLElement;
+  eventsFileLabel: HTMLElement;
+  eventsLegend: HTMLElement;
   annotateModeBtn: HTMLButtonElement;
   annotationList: HTMLElement;
   /** Holds the Good / Bad / Fixable / Unknown buttons (data-quality) */
   waveformQuality: HTMLElement;
   waveformComment: HTMLTextAreaElement;
   stackRow: HTMLElement;
-  /** Controls row labelled Auxiliary: holds the Stack checkboxes and the Confound dropdown */
+  /** Controls row labelled Auxiliary: holds the Event and Confound dropdowns and the Stack checkboxes */
   auxRow: HTMLElement;
   stackChannels: HTMLElement;
   stackSection: HTMLElement;
-  /** Wraps the stack and confounds sections under the "Auxiliary" label */
+  /** Wraps the stack, events and confounds sections under the "Auxiliary" label */
   auxiliarySection: HTMLElement;
   /** Stats folder tab and the scatter plot: shown only when quality metrics exist */
   statsTab: HTMLElement;
@@ -61,6 +68,8 @@ export function getElements(): ViewerElements {
     channelSelect: byId('channel-select'),
     confoundSelect: byId('confound-select'),
     confoundLabel: byId('confound-label'),
+    eventsSelect: byId('events-select'),
+    eventsLabel: byId('events-label'),
     prevBtn: byId('prev-btn'),
     nextBtn: byId('next-btn'),
     searchInput: byId('search-input'),
@@ -72,6 +81,9 @@ export function getElements(): ViewerElements {
     loading: byId('loading'),
     confoundsSection: byId('confounds-section'),
     confoundsLabel: byId('confounds-label'),
+    eventsSection: byId('events-section'),
+    eventsFileLabel: byId('events-file-label'),
+    eventsLegend: byId('events-legend'),
     annotateModeBtn: byId('annotate-mode-btn'),
     annotationList: byId('annotation-list'),
     waveformQuality: byId('waveform-quality'),

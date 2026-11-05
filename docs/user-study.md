@@ -28,7 +28,7 @@ Run these in a terminal in the project folder. The tool works with any dataset i
 
   ```bash
   brew install git-annex
-  uv tool install datalad
+  uv tool install datalad 
   datalad install -s https://github.com/OpenNeuroDatasets/ds006644.git data/ds006644
   cd data/ds006644
   datalad get sub-*/ses-*/func/*_physio.*

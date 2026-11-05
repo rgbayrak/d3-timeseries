@@ -375,8 +375,38 @@
       margin: 0 auto;
     }
 
-    #stack-section:not([style*="none"]) + #confounds-section {
+    #stack-section:not([style*="none"]) + #events-section,
+    #stack-section:not([style*="none"]) ~ #confounds-section,
+    #events-section:not([style*="none"]) + #confounds-section {
       margin-top: 12px;
+    }
+
+    /* Task events: file name, colour key, then the time-locked blocks */
+    #events-section {
+      max-width: var(--page-width);
+      margin: 0 auto;
+    }
+
+    #events-file-label {
+      margin-bottom: 4px;
+    }
+
+    /* Colour key in the same text as the file name above it */
+    #events-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 18px;
+      margin-bottom: 4px;
+      font-size: var(--fs-md);
+      color: var(--text);
+    }
+
+    #events-legend:empty {
+      display: none;
+    }
+
+    #events-chart {
+      max-width: var(--page-width);
     }
 
     /* Confounds file name: same look as the scan file name (.now-viewing-file) */
@@ -446,6 +476,7 @@
     <!-- What the Auxiliary charts below show; each part, and the row, hides when there is nothing to pick -->
     <div class="controls-row" id="aux-row" style="display:none">
       <span class="aux-title">Auxiliary Signal Options:</span>
+      <label id="events-label" class="aux-item" style="display:none">Event <select id="events-select"></select></label>
       <label id="confound-label" class="aux-item" style="display:none">Confound <select id="confound-select"></select></label>
       <span id="stack-row" class="aux-item" style="display:none">
         <span class="stack-title">Stack</span>
@@ -467,10 +498,15 @@
   <div class="section-label">Signal of interest</div>
   <div id="focus-chart"></div>
   <div id="context-chart"></div>
-  <!-- Stacked channels and the confound; shown when either is (see src/viewer/main.ts) -->
+  <!-- Stacked channels, task events and the confound; shown when any is (see src/viewer/main.ts) -->
   <div id="auxiliary-section" style="display:none;">
     <div class="section-label">Auxiliary</div>
     <div id="stack-section" style="display:none;"></div>
+    <div id="events-section" style="display:none;">
+      <div id="events-file-label" class="now-viewing-file"></div>
+      <div id="events-legend"></div>
+      <div id="events-chart"></div>
+    </div>
     <div id="confounds-section" style="display:none;">
       <div id="confounds-label" class="now-viewing-file"></div>
       <div id="confounds-chart"></div>

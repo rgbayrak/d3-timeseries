@@ -7,6 +7,8 @@ import {
   findPhysioFiles,
   readPhysio,
   readConfounds,
+  readEvents,
+  imagingRootOf,
   readDatasetInfo,
   buildScans,
 } from '../bids-layout';
@@ -148,8 +150,48 @@ describe('fixture: bids-sessions confounds', () => {
     expect(c.volumeTimes).toEqual(Array.from({ length: N_VOLUMES }, (_, i) => i * TR));
   });
 
+  it('reads MRIQC *_timeseries.tsv, using the lowest echo of a multi-echo run', () => {
+    const c = readConfounds(NOSES_ROOT, join(NOSES_ROOT, 'derivatives', 'mriqc'), '01', '', 'motor', '')!;
+    expect(c.filename).toBe('sub-01_task-motor_echo-1_timeseries.tsv');
+    expect(Object.keys(c.columns)).toEqual(['framewise_displacement', 'dvars', 'trans_x', 'rot_x']);
+    expect(c.columns.framewise_displacement[0]).toBeNaN();
+    expect(c.columns.framewise_displacement[1]).toBeCloseTo(0.05, 9);
+    // TR from the top-level task-motor_bold.json
+    expect(c.volumeTimes).toEqual(Array.from({ length: N_VOLUMES }, (_, i) => i * TR));
+  });
+
   it('returns null when there are no derivatives', () => {
     expect(readConfounds(NOSES_ROOT, NOSES_ROOT, '01', '', 'motor', '')).toBeNull();
+  });
+});
+
+describe('fixture: events', () => {
+  it('reads onsets, durations and the other columns as text', () => {
+    const e = readEvents(NOSES_ROOT, '01', '', 'motor', '')!;
+    expect(e.filename).toBe('sub-01_task-motor_events.tsv');
+    // the row without an onset is dropped; an n/a duration counts as 0
+    expect(e.onset).toEqual([0, 6, 12]);
+    expect(e.duration).toEqual([4, 4, 0]);
+    expect(e.columns).toEqual({
+      trial_type: ['left', 'right', 'left'],
+      response_time: ['0.52', 'n/a', '0.61'],
+    });
+  });
+
+  it('uses the run-less events file for every run (BIDS inheritance)', () => {
+    for (const run of ['1', '02']) {
+      expect(readEvents(NOSES_ROOT, '01', '', 'motor', run)?.filename).toBe('sub-01_task-motor_events.tsv');
+    }
+  });
+
+  it('returns null when the scan has no events file', () => {
+    expect(readEvents(NOSES_ROOT, '02', '', 'motor', '')).toBeNull();
+    expect(readEvents(SES_ROOT, '01', '01', 'rest', '01')).toBeNull();
+  });
+
+  it('reads events from the imaging folders, not from physprep/', () => {
+    expect(imagingRootOf('/data/shinobi/physprep')).toBe('/data/shinobi');
+    expect(imagingRootOf(NOSES_ROOT)).toBe(NOSES_ROOT);
   });
 });
 
