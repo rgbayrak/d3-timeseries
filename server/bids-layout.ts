@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync, existsSync, accessSync, constants, mkdirSync, writeFileSync } from 'fs';
 import { gunzipSync } from 'zlib';
-import { join, dirname, basename } from 'path';
+import { join, dirname, basename, relative } from 'path';
+import { isPlaceholder } from '../src/data/dataset-notice';
+import type { DescriptionField, DescriptionNotice, DescriptionSource } from '../src/data/dataset-notice';
 
 /** Matches physio .tsv.gz files (both _physio.tsv.gz and _desc-preproc_physio.tsv.gz) */
 const PHYSIO_GZ_RE = /_physio\.tsv\.gz$/;
@@ -197,15 +199,21 @@ export function detectTriggerOnsets(values: number[]): number[] {
   return onsets;
 }
 
+/**
+ * A scan's physio recording from physioRoot. BOLD timing for the trigger check
+ * comes from bidsRoot (the main BIDS folder, normally the same as physioRoot),
+ * then the derivatives.
+ */
 export function readPhysio(
-  bidsRoot: string,
+  physioRoot: string,
   sub: string,
   ses: string,
   task: string,
   run: string,
-  bidsderRoot: string = bidsRoot,
+  bidsderRoot: string = physioRoot,
+  bidsRoot: string = physioRoot,
 ) {
-  const found = findPhysioFiles(bidsRoot, sub, ses, task, run);
+  const found = findPhysioFiles(physioRoot, sub, ses, task, run);
   if (!found || !found.sidecarPath) return null;
 
   const sidecar: PhysioSidecar = JSON.parse(readFileSync(found.sidecarPath, 'utf-8'));
@@ -370,9 +378,10 @@ interface BoldTiming {
 }
 
 /**
- * TR and volume onsets from the BOLD sidecar: scan-level raw sidecar (exact
- * name, then e.g. per-echo names), then top-level task inheritance, then the
- * derivatives' BOLD sidecars.
+ * TR and volume onsets from the BOLD sidecar: scan-level sidecar in the main
+ * BIDS folder (exact name, then e.g. per-echo names), then top-level task
+ * inheritance there, then the derivatives' BOLD sidecars. Never read from a
+ * separate physio folder.
  * Returns null if no timing is found.
  */
 function readBoldTiming(
@@ -518,7 +527,7 @@ function findEventsFile(imagingRoot: string, sub: string, ses: string, task: str
  * Task events (BIDS *_events.tsv): onset and duration in seconds from the
  * first volume (the viewer's t = 0), plus every other column as text. Rows
  * without a numeric onset are dropped; an n/a duration counts as 0.
- * Read from the imaging folders only (see imagingRootOf), never from physprep/.
+ * Read from the main BIDS folder (BidsRoots.bidsRoot), never from a separate physio folder.
  */
 export function readEvents(imagingRoot: string, sub: string, ses: string, task: string, run: string) {
   const filePath = findEventsFile(imagingRoot, sub, ses, task, run);
@@ -552,6 +561,35 @@ export function readEvents(imagingRoot: string, sub: string, ses: string, task: 
   if (onset.length === 0) return null;
 
   return { filename: basename(filePath), onset, duration, columns };
+}
+
+/** Peak rows in a physprep events file: r_peak, systolic_peak, …, each optionally _corrected */
+const PEAK_TYPE_RE = /peak(_corrected)?$/i;
+
+/**
+ * TRIAL (not a supported feature yet): detected and corrected peaks from a
+ * physprep-style events file in the physio folder (onset, duration,
+ * trial_type such as r_peak / r_peak_corrected, channel such as ECG / PPG).
+ * Only peak rows with a channel are kept. Null if there are none.
+ */
+export function readPeaks(physioRoot: string, sub: string, ses: string, task: string, run: string) {
+  const events = readEvents(physioRoot, sub, ses, task, run);
+  const types = events?.columns.trial_type;
+  const channels = events?.columns.channel;
+  if (!events || !types || !channels) return null;
+
+  const time: number[] = [];
+  const channel: string[] = [];
+  const corrected: boolean[] = [];
+  events.onset.forEach((t, i) => {
+    const type = types[i] ?? '';
+    const ch = channels[i] ?? '';
+    if (!PEAK_TYPE_RE.test(type) || ch === '' || ch.toLowerCase() === 'n/a') return;
+    time.push(t);
+    channel.push(ch);
+    corrected.push(/_corrected$/i.test(type));
+  });
+  return time.length > 0 ? { filename: events.filename, time, channel, corrected } : null;
 }
 
 export interface StoredAnnotation {
@@ -689,32 +727,109 @@ export function writeAnnotations(root: string, payload: AnnotationsFile): void {
   writeFileSync(filePath, JSON.stringify(payload, null, 2));
 }
 
-/**
- * Raw and derivatives roots for a dataset folder. Handles plain BIDS
- * (data/ds006644, derivatives in derivatives/fmriprep) and layouts that keep
- * the raw data in physprep/ next to fmriprep/ (CNeuroMod: data/shinobi →
- * data/shinobi/physprep + data/shinobi/fmriprep). Passing the physprep folder
- * itself works too. An explicit derivatives root always wins.
- */
-export function resolveBidsRoots(root: string, derivOverride?: string): { bidsRoot: string; derivRoot: string } {
-  const bidsRoot =
-    !existsSync(join(root, 'dataset_description.json')) && existsSync(join(root, 'physprep'))
-      ? join(root, 'physprep')
-      : root;
-  if (derivOverride) return { bidsRoot, derivRoot: derivOverride };
-  const candidates = [join(bidsRoot, 'derivatives', 'fmriprep')];
-  if (basename(bidsRoot) === 'physprep') candidates.push(join(dirname(bidsRoot), 'fmriprep'));
-  return { bidsRoot, derivRoot: candidates.find((c) => existsSync(c)) ?? candidates[0] };
+export interface BidsRoots {
+  /** Main BIDS folder: dataset_description.json, participants.tsv, events, BOLD sidecars */
+  bidsRoot: string;
+  /** Folder holding the *_physio.tsv.gz files and their sidecars; normally bidsRoot */
+  physioRoot: string;
+  /** Derivatives folder: confounds and the derivatives' dataset_description.json */
+  derivRoot: string;
+  /** How each root was chosen, for the startup log */
+  notes: string[];
+}
+
+/** Sub-folders of dir, sorted, skipping hidden ones */
+function childDirs(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+    .map((e) => e.name)
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
 /**
- * Root of the imaging data (the func folders holding *_bold.nii.gz), where task
- * events live. In a physprep layout (data/shinobi/physprep next to the imaging
- * folders) that is the parent of physprep/, so events copied into physprep/
- * are not used; for plain BIDS it is the dataset root itself.
+ * First file name in dir's sub-XX/[ses-YY/]func/ folders that passes test,
+ * or null. Names are listed whether or not the files are downloaded, and the
+ * search stops at the first match.
  */
-export function imagingRootOf(bidsRoot: string): string {
-  return basename(bidsRoot) === 'physprep' ? dirname(bidsRoot) : bidsRoot;
+function findInFuncDirs(dir: string, test: (name: string) => boolean): string | null {
+  for (const sub of childDirs(dir).filter((d) => d.startsWith('sub-'))) {
+    const subDir = join(dir, sub);
+    const sessions = childDirs(subDir).filter((d) => d.startsWith('ses-'));
+    for (const fd of [join(subDir, 'func'), ...sessions.map((s) => join(subDir, s, 'func'))]) {
+      if (!existsSync(fd)) continue;
+      const hit = readdirSync(fd).find(test);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+/** Rank of the best confounds pattern found in dir (lower is better), or null */
+function confoundsRank(dir: string): number | null {
+  let best: number | null = null;
+  findInFuncDirs(dir, (f) => {
+    const rank = CONFOUNDS_PATTERNS.findIndex((p) => p.test(f));
+    if (rank !== -1 && (best === null || rank < best)) best = rank;
+    return best === 0; // keep looking until the most preferred pattern is seen
+  });
+  return best;
+}
+
+/**
+ * Physio and derivatives roots for a main BIDS folder, found by what the
+ * folders contain (sub-XX/[ses-YY/]func/ files), never by folder name.
+ *
+ * - Physio: the main folder when it has *_physio.tsv.gz files; else the
+ *   first folder inside it, or inside its derivatives/, that has them.
+ * - Derivatives: the folder inside derivatives/ with confounds files,
+ *   preferring fMRIPrep's over MRIQC's (CONFOUNDS_PATTERNS order).
+ *
+ * Physio or derivatives stored outside the main folder are not searched for:
+ * pass them as overrides (BIDSPHYS_ROOT, BIDSDER_ROOT), which always win.
+ */
+export function resolveBidsRoots(
+  bidsRoot: string,
+  overrides: { physioRoot?: string; derivRoot?: string } = {},
+): BidsRoots {
+  const notes: string[] = [];
+  const derivativesDir = join(bidsRoot, 'derivatives');
+  const isPhysio = (f: string) => PHYSIO_GZ_RE.test(f);
+
+  let physioRoot = overrides.physioRoot;
+  if (physioRoot) notes.push('physio root given explicitly');
+  else if (findInFuncDirs(bidsRoot, isPhysio)) {
+    physioRoot = bidsRoot;
+    notes.push('physio files found in the main BIDS folder');
+  } else {
+    const candidates = [
+      ...childDirs(bidsRoot).filter((d) => !d.startsWith('sub-') && d !== 'derivatives').map((d) => join(bidsRoot, d)),
+      ...childDirs(derivativesDir).map((d) => join(derivativesDir, d)),
+    ].filter((d) => findInFuncDirs(d, isPhysio));
+    physioRoot = candidates[0] ?? bidsRoot;
+    if (candidates.length === 0) notes.push('no *_physio.tsv.gz files found; set BIDSPHYS_ROOT if they are stored elsewhere');
+    else notes.push(`physio files found in ${physioRoot}`);
+    if (candidates.length > 1) {
+      notes.push(`physio files also in ${candidates.slice(1).join(', ')}; set BIDSPHYS_ROOT to choose`);
+    }
+  }
+
+  let derivRoot = overrides.derivRoot;
+  if (derivRoot) notes.push('derivatives root given explicitly');
+  else {
+    const ranked = childDirs(derivativesDir)
+      .map((d) => ({ dir: join(derivativesDir, d), rank: confoundsRank(join(derivativesDir, d)) }))
+      .filter((c): c is { dir: string; rank: number } => c.rank !== null)
+      .sort((a, b) => a.rank - b.rank); // stable: name order within a rank
+    derivRoot = ranked[0]?.dir ?? derivativesDir;
+    if (ranked.length === 0) notes.push('no confounds files found; set BIDSDER_ROOT if the derivatives are stored elsewhere');
+    else notes.push(`confounds found in ${derivRoot}`);
+    if (ranked.length > 1) {
+      notes.push(`confounds also in ${ranked.slice(1).map((c) => c.dir).join(', ')}; set BIDSDER_ROOT to choose`);
+    }
+  }
+
+  return { bidsRoot, physioRoot, derivRoot, notes };
 }
 
 export function buildScans(bidsRoot: string, subjects: SubjectInfo[]): ScanEntry[] {
@@ -745,6 +860,8 @@ export interface DatasetInfo {
   doi: string | null;
   /** Pipelines that generated the derivatives (e.g. fMRIPrep 23.0.2), if any */
   derivatives: { name: string; version: string | null }[];
+  /** Where the title and authors came from, and what the user should fix */
+  description: DescriptionNotice;
 }
 
 function readJsonIfReadable(path: string): Record<string, unknown> | null {
@@ -756,22 +873,101 @@ function readJsonIfReadable(path: string): Record<string, unknown> | null {
   }
 }
 
-/** Dataset-level metadata from dataset_description.json (raw + derivatives) */
-export function readDatasetInfo(bidsRoot: string, bidsderRoot: string): DatasetInfo {
-  const raw = readJsonIfReadable(join(bidsRoot, 'dataset_description.json')) ?? {};
+/** http(s) URL as is, a DOI as https://doi.org/…; anything else (bids: URIs, relative paths) is null */
+function webLink(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  if (/^https?:\/\//i.test(s)) return s;
+  const doi = s.replace(/^doi:/i, '').replace(/^https?:\/\/(dx\.)?doi\.org\//i, '');
+  return /^10\.\d{4,}\//.test(doi) ? `https://doi.org/${doi}` : null;
+}
+
+/**
+ * The main BIDS folder as a DataLad subdataset of the folder above it: its
+ * URL and install command from that folder's .gitmodules, or null.
+ */
+function subdatasetSource(bidsRoot: string): { url: string | null; command: string } | null {
+  const parent = dirname(bidsRoot);
+  const gitmodules = join(parent, '.gitmodules');
+  if (!isReadable(gitmodules)) return null;
+  const rel = relative(parent, bidsRoot);
+  // [submodule "…"] sections, each with path = … and url = … (DataLad may add datalad-url)
+  for (const section of readFileSync(gitmodules, 'utf-8').split(/^\s*\[submodule\b/m).slice(1)) {
+    const field = (key: string) => section.match(new RegExp(`^\\s*${key}\\s*=\\s*(.+?)\\s*$`, 'm'))?.[1] ?? null;
+    if (field('path') !== rel) continue;
+    return {
+      url: webLink(field('datalad-url')) ?? webLink(field('url')),
+      command: `cd ${parent} && datalad get -n ${rel} && datalad get ${rel}/dataset_description.json`,
+    };
+  }
+  return null;
+}
+
+/** First web link in a description's SourceDatasets ([{ URL, DOI, Version }]), or null */
+function sourceDatasetLink(desc: Record<string, unknown> | null): string | null {
+  const sources = Array.isArray(desc?.SourceDatasets) ? desc.SourceDatasets : [];
+  for (const s of sources as { URL?: unknown; DOI?: unknown }[]) {
+    const link = webLink(s?.URL) ?? webLink(s?.DOI);
+    if (link) return link;
+  }
+  return null;
+}
+
+/**
+ * Dataset-level metadata from dataset_description.json (main + derivatives).
+ * When the main BIDS folder has none, the title and authors come from the
+ * physio folder's description, then the derivatives', and
+ * description.mainMissing says where to get the main one. Placeholder titles
+ * and authors (n/a, Unknown, Author 1, …) are dropped and listed in
+ * description.missingFields.
+ */
+export function readDatasetInfo(bidsRoot: string, bidsderRoot: string, physioRoot: string = bidsRoot): DatasetInfo {
+  const mainPath = join(bidsRoot, 'dataset_description.json');
+  const main = readJsonIfReadable(mainPath);
   const der = readJsonIfReadable(join(bidsderRoot, 'dataset_description.json'));
+  const physioPath = join(physioRoot, 'dataset_description.json');
+  const physio = physioRoot !== bidsRoot ? readJsonIfReadable(physioPath) : null;
   const str = (v: unknown) => (typeof v === 'string' && v.length > 0 ? v : null);
 
+  // Title and authors: main, else physio, else derivatives
+  const [source, file, desc]: [DescriptionSource, string | null, Record<string, unknown>] = main
+    ? ['main', mainPath, main]
+    : physio
+      ? ['physio', physioPath, physio]
+      : der
+        ? ['derivatives', join(bidsderRoot, 'dataset_description.json'), der]
+        : ['none', null, {}];
+  const name = isPlaceholder(desc.Name) ? null : (desc.Name as string).trim();
+  const authors = Array.isArray(desc.Authors)
+    ? desc.Authors.filter((a): a is string => !isPlaceholder(a)).map((a) => a.trim())
+    : [];
+  const missingFields: DescriptionField[] = [];
+  if (!name) missingFields.push('Name');
+  if (authors.length === 0) missingFields.push('Authors');
+
+  let mainMissing: DescriptionNotice['mainMissing'] = null;
+  if (!main) {
+    const sub = subdatasetSource(bidsRoot);
+    mainMissing = {
+      path: mainPath,
+      url: sub?.url ?? sourceDatasetLink(physio) ?? sourceDatasetLink(der),
+      command: sub?.command ?? null,
+    };
+  }
+
+  // The other fields describe the main dataset only, never a fallback pipeline
+  const raw = main ?? {};
   const generatedBy = Array.isArray(der?.GeneratedBy) ? der.GeneratedBy : [];
   return {
-    name: str(raw.Name),
+    name,
     bidsVersion: str(raw.BIDSVersion),
     datasetType: str(raw.DatasetType),
     license: str(raw.License),
-    authors: Array.isArray(raw.Authors) ? raw.Authors.filter((a): a is string => typeof a === 'string') : [],
+    authors,
     doi: str(raw.DatasetDOI),
     derivatives: generatedBy
       .filter((g: { Name?: unknown }) => typeof g?.Name === 'string')
       .map((g: { Name: string; Version?: unknown }) => ({ name: g.Name, version: str(g.Version) })),
+    description: { file, source, missingFields, mainMissing },
   };
 }

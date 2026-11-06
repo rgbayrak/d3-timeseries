@@ -1,4 +1,5 @@
 import type { ChannelMetrics } from '../data/sqi-metrics';
+import type { DescriptionNotice } from '../data/dataset-notice';
 
 // TSV format for dataset-wide quality metrics: one row per scan and channel.
 // Shared by the Node script that writes it (server/quality-metrics.ts) and the
@@ -181,6 +182,8 @@ export interface DatasetInfoLike {
   authors: string[];
   doi: string | null;
   derivatives: { name: string; version: string | null }[];
+  /** Absent from metrics computed before it existed */
+  description?: DescriptionNotice;
 }
 
 export interface ParticipantColumnMeta {

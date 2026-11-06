@@ -133,6 +133,21 @@ def events_tsv() -> str:
     return "\n".join("\t".join(r) for r in rows) + "\n"
 
 
+def peaks_events_tsv() -> str:
+    """physprep-style events: detected and corrected peaks per channel (TRIAL peaks overlay)."""
+    rows = [
+        ["onset", "duration", "trial_type", "channel"],
+        ["0.694", "0", "r_peak", "ECG"],
+        ["0.694", "0", "r_peak_corrected", "ECG"],
+        ["1.046", "0", "r_peak", "ECG"],
+        ["1.171", "0", "systolic_peak", "PPG"],
+        ["1.171", "0", "systolic_peak_corrected", "PPG"],
+        ["2.000", "0", "r_peak", "n/a"],
+        ["3.000", "5", "movie_start", "n/a"],
+    ]
+    return "\n".join("\t".join(r) for r in rows) + "\n"
+
+
 # ---------------------------------------------------------------- datasets
 
 def make_sessions(root: Path) -> None:
@@ -175,6 +190,10 @@ def make_sessions(root: Path) -> None:
                 "VolumeTiming": [k * TR for k in range(N_VOLUMES)],
                 "TaskName": "rest",
             })
+
+    # TRIAL peaks overlay: physprep-style peak rows in the physio folder (sub-01 ses-02),
+    # plus a peak without a channel and a non-peak row, both ignored
+    write_text(root / "sub-01" / "ses-02" / "func" / "sub-01_ses-02_task-rest_run-01_events.tsv", peaks_events_tsv())
 
     # Run-level quality sidecar for sub-01 ses-01
     # PercentageValid is a fraction (0-1, one decimal), as in physprep outputs
