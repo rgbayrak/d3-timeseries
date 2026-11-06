@@ -26,9 +26,9 @@ Run these in a terminal in the project folder. The tool works with any dataset i
 
 - **Download the study dataset (ds006644)** with DataLad, which fetches only the files the tool needs:
 
+Download datalad: 
+
   ```bash
-  brew install git-annex
-  uv tool install datalad 
   datalad install -s https://github.com/OpenNeuroDatasets/ds006644.git data/ds006644
   cd data/ds006644
   datalad get sub-*/ses-*/func/*_physio.*
@@ -38,15 +38,15 @@ Run these in a terminal in the project folder. The tool works with any dataset i
 
 - **Or add your own BIDS-compliant dataset:** copy (or link) it to `data/<name>/`. Any dataset in BIDS format works, as long as it has:
   - physiological recordings as `sub-XX/[ses-XX/]func/*_physio.tsv.gz`, each with a JSON sidecar giving `SamplingFrequency`, `StartTime` and `Columns`;
-  - optionally fMRIPrep derivatives (`*_desc-confounds_timeseries.tsv`) to show head-motion confounds, by default in `derivatives/fmriprep/` inside the dataset.
+  - optionally fMRIPrep derivatives (`*_desc-confounds_timeseries.tsv`) to show head-motion confounds, by default in a folder inside `derivatives/` in the dataset.
 
-  The dataset can also stay where it is: give the tool its path instead (step 4).
+  The dataset can also stay where it is: give the tool its path instead (step 4). If the physio or the derivatives are stored next to the main BIDS folder rather than inside it (e.g. CNeuroMod), give all three folders (steps 3 and 4).
 
 **3. Optional: compute the quality metrics first.** If you want the dataset-wide quality metrics to visualize (the scatter plot in Explore and Annotate, the Stats tab and the PDF report), run the script once for the dataset before starting the tool:
 
 ```bash
-npx vite-node scripts/compute-quality-metrics.ts ds006644          # dataset folder name under data/
 npx vite-node scripts/compute-quality-metrics.ts mydata --bids-root /path/to/bids --deriv-root /path/to/derivatives/fmriprep
+npx vite-node scripts/compute-quality-metrics.ts friends --bids-root data/friends/friends --physio-root data/friends/physprep --deriv-root data/friends/fmriprep   # physio and derivatives next to the main BIDS folder
 ```
 
 It writes `data/quality/<name>/`. Without it, the tool still works for exploring and annotating; the scatter plot and the Stats tab only appear once the metrics exist. *In the study session, skip this step: task 2 runs it.*
@@ -57,9 +57,10 @@ It writes `data/quality/<name>/`. Without it, the tool still works for exploring
 npm run dev                                                        # serves data/ds006644
 BIDS_ROOT=data/mydata npm run dev                                  # another dataset under data/
 BIDS_ROOT=/path/to/bids BIDSDER_ROOT=/path/to/derivatives/fmriprep npm run dev   # a dataset outside data/
+BIDS_ROOT=data/friends/friends BIDSPHYS_ROOT=data/friends/physprep BIDSDER_ROOT=data/friends/fmriprep npm run dev   # physio and derivatives next to the main BIDS folder
 ```
 
-`BIDS_ROOT` is the path to the BIDS root (the folder with `dataset_description.json`) and `BIDSDER_ROOT` the path to the derivatives (fMRIPrep) folder. Open the address it prints (usually `http://localhost:5173`). For a dataset outside `data/`, compute its metrics (step 3) with `--bids-root` and `--deriv-root`, and give the script the name of the `BIDS_ROOT` folder (e.g. `/path/to/mydata` → `mydata`), so the tool finds them. More options are in the README, under *Using your own dataset*.
+`BIDS_ROOT` is always the path to the main BIDS folder (the one with `dataset_description.json`), even when the physio is stored elsewhere. `BIDSPHYS_ROOT` is the folder with the physio files and `BIDSDER_ROOT` the derivatives (fMRIPrep) folder; both are found automatically when they are inside `BIDS_ROOT`, and must be given when they are not. Open the address it prints (usually `http://localhost:5173`). For a dataset outside `data/`, compute its metrics (step 3) with `--bids-root` and `--deriv-root`, and give the script the name of the `BIDS_ROOT` folder (e.g. `/path/to/mydata` → `mydata`), so the tool finds them. More options are in the README, under *Using your own dataset*.
 
 **During the session**, fill in the **Done** column for each task:
 **S** = completed alone, **H** = completed with facilitator help, **F** = failed or gave up, **–** = not reached.
