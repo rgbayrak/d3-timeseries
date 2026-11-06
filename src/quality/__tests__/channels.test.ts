@@ -4,7 +4,7 @@ import { classifyChannel, channelKeys, isPhysioChannel, PHYSIO_CHANNELS, NON_PHY
 describe('physio channel dictionary', () => {
   it('accepts every column name found in the local datasets', () => {
     // ds000210, ds006644: cardiac, respiratory (+ trigger)
-    // movie10, shinobi (physprep): PPG, ECG, RSP, EDA, EDATonic, EDAPhasic
+    // movie10, friends (physprep): PPG, ECG, RSP, EDA, EDATonic, EDAPhasic
     expect(['cardiac', 'respiratory'].map(classifyChannel)).toEqual([
       { physio: true, signal: 'cardiac' },
       { physio: true, signal: 'respiratory' },

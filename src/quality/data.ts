@@ -1,5 +1,7 @@
 import { DATASET_JSON_NAME, METRICS_TSV_NAME, WAVEFORMS_DIR, parseQualityTsv, scanId } from './metrics-tsv';
 import type { DatasetQualityFile, QualityRow, ScanKeyLike, WaveformFile } from './metrics-tsv';
+import { RUN_LOG_NAME, parseLastRun } from './run-log';
+import type { QualityRun } from './run-log';
 
 // Loads the static files written by scripts/compute-quality-metrics.ts. The
 // dev server serves them from data/quality/ directly; no API endpoint needed.
@@ -46,16 +48,19 @@ export async function fetchServedDataset(): Promise<ServedDataset | null> {
 export interface LoadedDataset {
   summary: DatasetQualityFile;
   rows: QualityRow[];
+  /** Last line of quality_runs.tsv; null for metrics computed before the run log existed */
+  lastRun: QualityRun | null;
 }
 
 export async function fetchDatasetQuality(dataset: string): Promise<LoadedDataset | null> {
   const base = `${QUALITY_BASE}/${encodeURIComponent(dataset)}`;
-  const [summary, tsv] = await Promise.all([
+  const [summary, tsv, runLog] = await Promise.all([
     fetchJson<DatasetQualityFile>(`${base}/${DATASET_JSON_NAME}`),
     fetchText(`${base}/${METRICS_TSV_NAME}`),
+    fetchText(`${base}/${RUN_LOG_NAME}`).catch(() => null),
   ]);
   if (!summary || tsv == null) return null;
-  return { summary, rows: parseQualityTsv(tsv) };
+  return { summary, rows: parseQualityTsv(tsv), lastRun: runLog ? parseLastRun(runLog) : null };
 }
 
 /** Whether the served dataset's PDF report is saved, and where to open it */

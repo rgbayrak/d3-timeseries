@@ -340,7 +340,7 @@ export async function buildQualityReport(opts: ReportOptions): Promise<Blob> {
     await L.heading(`Quality metrics report: ${dataset}`, 18, 0);
     for (const line of datasetInfoLines(s.info)) await L.text(line, 10, { color: '#444' });
     L.gap(6);
-    await L.text(datasetSummaryText(s, data.rows), 10);
+    await L.text(datasetSummaryText(s, data.rows, data.lastRun), 10);
     const st = summaryTable(data.rows, s.channels);
     if (st) {
       L.gap(4);

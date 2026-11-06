@@ -248,6 +248,17 @@ describe('model', () => {
     );
   });
 
+  it('ends with the last metrics run when the run log has one', () => {
+    const text = datasetSummaryText(
+      { nSubjects: 2, nScans: 2, tasks: ['rest'], samplingFrequencies: [496], channels: ['cardiac'] },
+      [row({ sub: '01', channel: 'cardiac' }), row({ sub: '02', channel: 'cardiac' })],
+      { runDate: '2026-11-05T15:40:12', scansComputed: 2, scansAvailable: 5, scansFailed: 0, countSource: 'git-annex' },
+    );
+    expect(text.endsWith(' Quality metrics were last computed on 2026-11-05 for 2 of 5 scans (3 not downloaded).')).toBe(
+      true,
+    );
+  });
+
   it('spells out mixed tasks, rates, channel coverage and timing', () => {
     const text = datasetSummaryText(
       { nSubjects: 2, nScans: 2, tasks: ['motor', 'rest'], samplingFrequencies: [50, 496], channels: ['cardiac', 'respiratory', 'trigger'] },

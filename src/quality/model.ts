@@ -2,6 +2,8 @@ import { SQI_COLUMNS, formatMetricValue } from '@/viewer/sqi-table';
 import { METRIC_COLUMNS, sameScanKey, scanId } from './metrics-tsv';
 import type { MetricKey, QualityRow, ScanKeyLike, ParticipantsTable } from './metrics-tsv';
 import { finiteValues } from './stats';
+import { runSentence } from './run-log';
+import type { QualityRun } from './run-log';
 
 // Pure helpers behind the Stats tab, the scatter plot in Explore and Annotate and the PDF (no DOM access).
 
@@ -382,8 +384,12 @@ export interface SummaryInput {
   channels: string[];
 }
 
-/** Plain-text paragraph describing the dataset's scans, channels and timing */
-export function datasetSummaryText(s: SummaryInput, rows: QualityRow[]): string {
+/**
+ * Plain-text paragraph describing the dataset's scans, channels and timing,
+ * ending with when the metrics were last computed and their coverage (if the
+ * run log has it)
+ */
+export function datasetSummaryText(s: SummaryInput, rows: QualityRow[], lastRun: QualityRun | null = null): string {
   const sentences: string[] = [];
 
   let first = `This dataset has ${plural(s.nScans, 'scan')} from ${plural(s.nSubjects, 'subject')}`;
@@ -418,6 +424,8 @@ export function datasetSummaryText(s: SummaryInput, rows: QualityRow[]): string 
       .map(([status, n]) => `${TIMING_PHRASES[status]} for ${plural(n, 'scan')}`);
     sentences.push(`Scan-onset timing was ${humanList(parts)}.`);
   }
+
+  if (lastRun) sentences.push(runSentence(lastRun));
 
   return sentences.join(' ');
 }
