@@ -11,6 +11,12 @@ export interface ViewerElements {
   /** Events column dropdown and its "Event" label in the Auxiliary row */
   eventsSelect: HTMLSelectElement;
   eventsLabel: HTMLLabelElement;
+  /** TRIAL: "Peaks (trial)" checkbox and its label (src/viewer/peaks-trial.ts) */
+  peaksToggle: HTMLInputElement;
+  peaksLabel: HTMLLabelElement;
+  /** "On disk data summary" under the dataset header, and its lines: downloaded recordings and quality metrics coverage */
+  datasetSummary: HTMLElement;
+  datasetSummaryLines: HTMLElement;
   prevBtn: HTMLButtonElement;
   nextBtn: HTMLButtonElement;
   searchInput: HTMLInputElement;
@@ -43,6 +49,8 @@ export interface ViewerElements {
   /** Stats folder tab and the scatter plot: shown only when quality metrics exist */
   statsTab: HTMLElement;
   scatterSection: HTMLElement;
+  /** Channel name in the scatter heading */
+  scatterChannel: HTMLElement;
   scatterX: HTMLSelectElement;
   scatterY: HTMLSelectElement;
   scatterColor: HTMLSelectElement;
@@ -70,6 +78,10 @@ export function getElements(): ViewerElements {
     confoundLabel: byId('confound-label'),
     eventsSelect: byId('events-select'),
     eventsLabel: byId('events-label'),
+    peaksToggle: byId('peaks-toggle'),
+    peaksLabel: byId('peaks-label'),
+    datasetSummary: byId('dataset-summary'),
+    datasetSummaryLines: byId('dataset-summary-lines'),
     prevBtn: byId('prev-btn'),
     nextBtn: byId('next-btn'),
     searchInput: byId('search-input'),
@@ -95,6 +107,7 @@ export function getElements(): ViewerElements {
     auxiliarySection: byId('auxiliary-section'),
     statsTab: byId('stats-tab'),
     scatterSection: byId('scatter-section'),
+    scatterChannel: byId('scatter-channel'),
     scatterX: byId('scatter-x'),
     scatterY: byId('scatter-y'),
     scatterColor: byId('scatter-color'),

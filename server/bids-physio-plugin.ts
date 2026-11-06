@@ -9,7 +9,7 @@ import {
   readPhysio,
   readConfounds,
   readEvents,
-  imagingRootOf,
+  readPeaks,
   readAnnotations,
   writeAnnotations,
   buildScans,
@@ -20,6 +20,10 @@ import {
   annotationProgress,
 } from './bids-layout';
 import type { AnnotationsFile, ScanKey } from './bids-layout';
+import { countPhysioFiles } from './availability';
+import { checkStructure } from './bids-structure';
+import { descriptionNoticeLines, noticeText } from '../src/data/dataset-notice';
+import { structureLine, structureText } from '../src/data/bids-structure';
 import type { ServerResponse } from 'http';
 
 /** Reply 400 and return true if any identifier is unsafe to put in a file path */
@@ -31,17 +35,24 @@ function rejectInvalid(res: ServerResponse, key: ScanKey): boolean {
   return true;
 }
 
-// BIDS_ROOT may be the dataset folder or its physprep/ (data/shinobi and
-// data/shinobi/physprep both work); derivatives default to derivatives/fmriprep,
-// or fmriprep/ next to physprep/. BIDSDER_ROOT overrides.
-const { bidsRoot: BIDS_ROOT, derivRoot: BIDSDER_ROOT } = resolveBidsRoots(
-  process.env.BIDS_ROOT ?? join(process.cwd(), 'data', 'ds006644'),
-  process.env.BIDSDER_ROOT,
-);
+// BIDS_ROOT is always the main BIDS folder (dataset_description.json,
+// participants.tsv, events, BOLD sidecars). Physio files normally live there
+// too; when they are stored elsewhere, BIDSPHYS_ROOT points at them, and
+// BIDSDER_ROOT at derivatives outside BIDS_ROOT/derivatives/. Without them,
+// both are found inside BIDS_ROOT by their files (see resolveBidsRoots).
+const {
+  bidsRoot: BIDS_ROOT,
+  physioRoot: BIDSPHYS_ROOT,
+  derivRoot: BIDSDER_ROOT,
+  notes: ROOT_NOTES,
+} = resolveBidsRoots(process.env.BIDS_ROOT ?? join(process.cwd(), 'data', 'ds006644'), {
+  physioRoot: process.env.BIDSPHYS_ROOT,
+  derivRoot: process.env.BIDSDER_ROOT,
+});
 
 const DATA_DIR = join(process.cwd(), 'data');
 
-// Dataset name = first folder under data/ (data/shinobi/physprep → shinobi,
+// Dataset name = first folder under data/ (data/friends/friends → friends,
 // data/ds006644 → ds006644); outside data/, fall back to BIDS_ROOT's basename.
 function datasetName(): string {
   if (process.env.DATASET_NAME) return process.env.DATASET_NAME;
@@ -65,26 +76,58 @@ export function bidsPhysioPlugin(): Plugin {
   let cachedSubjectsJson: string;
   let cachedScansJson: string;
   let cachedDatasetJson: string;
+  let scans: ReturnType<typeof buildScans> = [];
 
-  return {
-    name: 'bids-physio',
-    configureServer(server) {
-      const subjects = getSubjects(BIDS_ROOT);
+  /** Subjects, scans (from the physio root) and dataset info (from BIDS_ROOT), read once and logged */
+  function cacheDataset() {
+      const subjects = getSubjects(BIDSPHYS_ROOT);
       cachedSubjectsJson = JSON.stringify({ subjects });
-      const scans = buildScans(BIDS_ROOT, subjects);
+      scans = buildScans(BIDSPHYS_ROOT, subjects);
       cachedScansJson = JSON.stringify({ scans });
-      console.log(
-        `[bids-physio] Cached ${subjects.length} subjects, ${scans.length} scans from ${BIDS_ROOT}`,
-      );
+      console.log(`[bids-physio] BIDS root: ${BIDS_ROOT}`);
+      console.log(`[bids-physio] Physio root: ${BIDSPHYS_ROOT}`);
       console.log(`[bids-physio] Derivatives root: ${BIDSDER_ROOT}`);
+      for (const note of ROOT_NOTES) console.log(`[bids-physio]   ${note}`);
+      console.log(`[bids-physio] Cached ${subjects.length} subjects, ${scans.length} scans`);
       if (scans.length === 0) {
+        const check = process.env.BIDSPHYS_ROOT
+          ? 'BIDSPHYS_ROOT'
+          : 'that BIDS_ROOT is the main BIDS folder (set BIDSPHYS_ROOT if the physio is stored elsewhere)';
         console.warn(
-          `[bids-physio] No readable physio files under ${BIDS_ROOT}. Check BIDS_ROOT, ` +
+          `[bids-physio] No readable physio files under ${BIDSPHYS_ROOT}. Check ${check}, ` +
             'and that the *_physio.tsv.gz files have been downloaded (datalad get).',
         );
       }
       // `id` is the folder name under data/ (e.g. ds006644); the Stats tabs use it to find data/quality/<id>/
-      cachedDatasetJson = JSON.stringify({ ...readDatasetInfo(BIDS_ROOT, BIDSDER_ROOT), id: datasetName() });
+      // Downloaded vs listed physio files, counted once (git-annex when it can answer)
+      const physioFiles = countPhysioFiles(BIDSPHYS_ROOT);
+      console.log(
+        `[bids-physio] Physio files: ${physioFiles.downloaded} of ${physioFiles.onDisk} downloaded (${physioFiles.source})`,
+      );
+      const info = readDatasetInfo(BIDS_ROOT, BIDSDER_ROOT, BIDSPHYS_ROOT);
+      for (const line of descriptionNoticeLines(info.description)) console.warn(`[bids-physio] ${noticeText(line)}`);
+      // File and folder names against the rules of the declared BIDSVersion (names only, nothing downloaded)
+      const structure = checkStructure(BIDS_ROOT, info.bidsVersion);
+      const structureMsg = structureLine(structure);
+      if (structureMsg) console.log(`[bids-physio] ${structureText(structureMsg)}`);
+      cachedDatasetJson = JSON.stringify({
+        ...info,
+        id: datasetName(),
+        physioFiles,
+        structure,
+      });
+    }
+
+  return {
+    name: 'bids-physio',
+    configureServer(server) {
+      // Scan the dataset only when the dev server starts listening. Scripts run
+      // with vite-node (e.g. scripts/compute-quality-metrics.ts) also load this
+      // plugin but never listen, so they skip this scan of the default BIDS_ROOT
+      // and its log lines. The work is synchronous, so it finishes before the
+      // first request is handled. No HTTP server (middleware mode): scan now.
+      if (server.httpServer) server.httpServer.once('listening', cacheDataset);
+      else cacheDataset();
 
       server.middlewares.use((req, res, next) => {
         if (req.url === '/api/bids/subjects') {
@@ -116,7 +159,7 @@ export function bidsPhysioPlugin(): Plugin {
           }
           if (rejectInvalid(res, { sub, ses })) return;
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ tasks: getTasks(BIDS_ROOT, sub, ses) }));
+          res.end(JSON.stringify({ tasks: getTasks(BIDSPHYS_ROOT, sub, ses) }));
           return;
         }
 
@@ -132,7 +175,7 @@ export function bidsPhysioPlugin(): Plugin {
           }
           if (rejectInvalid(res, { sub, ses, task })) return;
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ runs: getRuns(BIDS_ROOT, sub, ses, task) }));
+          res.end(JSON.stringify({ runs: getRuns(BIDSPHYS_ROOT, sub, ses, task) }));
           return;
         }
 
@@ -150,7 +193,7 @@ export function bidsPhysioPlugin(): Plugin {
           }
           if (rejectInvalid(res, { sub, ses, task, run })) return;
 
-          const result = readPhysio(BIDS_ROOT, sub, ses, task, run, BIDSDER_ROOT);
+          const result = readPhysio(BIDSPHYS_ROOT, sub, ses, task, run, BIDSDER_ROOT, BIDS_ROOT);
           if (!result) {
             res.statusCode = 404;
             res.end(JSON.stringify({ error: 'Physio file not found' }));
@@ -198,11 +241,32 @@ export function bidsPhysioPlugin(): Plugin {
           }
           if (rejectInvalid(res, { sub, ses, task, run })) return;
 
-          // Events sit with the imaging data (*_bold.nii.gz), not in physprep/.
+          // Events sit with the imaging data in BIDS_ROOT, not in a separate physio folder.
           // No events file (e.g. rest) is not an error: reply null (200), not 404
-          const result = readEvents(imagingRootOf(BIDS_ROOT), sub, ses, task, run);
+          const result = readEvents(BIDS_ROOT, sub, ses, task, run);
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify(result ?? null));
+          return;
+        }
+
+        // TRIAL: detected/corrected peaks from the events file in the physio
+        // folder itself (e.g. physprep/), not the imaging folders. null if none.
+        if (req.url?.startsWith('/api/bids/peaks')) {
+          const url = new URL(req.url, 'http://localhost');
+          const sub = url.searchParams.get('sub');
+          const ses = url.searchParams.get('ses') ?? '';
+          const task = url.searchParams.get('task');
+          const run = url.searchParams.get('run') ?? '';
+
+          if (!sub || !task) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: 'Missing sub or task parameter' }));
+            return;
+          }
+          if (rejectInvalid(res, { sub, ses, task, run })) return;
+
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(readPeaks(BIDSPHYS_ROOT, sub, ses, task, run) ?? null));
           return;
         }
 

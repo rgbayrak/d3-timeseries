@@ -5,12 +5,13 @@ import {
   fetchPhysioRaw,
   fetchConfounds,
   fetchEvents,
+  fetchPeaks,
   fetchAnnotations,
   fetchAnnotationProgress,
   saveAnnotations,
   getViewExtent,
 } from '@/data/bids-physio-reader';
-import type { ScanEntry, PhysioRaw, ConfoundsRaw, EventsRaw } from '@/data/bids-physio-reader';
+import type { ScanEntry, PhysioRaw, ConfoundsRaw, EventsRaw, PeaksRaw } from '@/data/bids-physio-reader';
 import { getElements } from './dom';
 import { createState, sameScan } from './state';
 import {
@@ -23,7 +24,10 @@ import {
 } from './annotations';
 import type { WaveformQuality } from '@/data/bids-physio-reader';
 import { renderAnnotationList, progressColor, escapeHtml } from './annotation-panel';
-import { renderDatasetInfo, renderQualityBadges } from './info';
+import { renderDatasetInfo, renderQualityBadges, renderSummary } from './info';
+import type { MetricsStatus } from './info';
+import type { PhysioFileCount } from '@/data/bids-physio-reader';
+import type { BidsStructure } from '@/data/bids-structure';
 import {
   populateSelect,
   populateTasks,
@@ -42,6 +46,9 @@ import type { ConfoundsChartHandle } from './charts/confounds';
 import { buildEventsChart } from './charts/events';
 import type { EventsChartHandle } from './charts/events';
 import { isRestTask, defaultEventColumn, usefulEventColumns } from './events';
+import { peaksForChannel } from './peaks-trial';
+import type { Peak } from './peaks-trial';
+import { drawPeaks } from './charts/peaks-trial';
 import { buildStackCharts } from './charts/stack';
 import type { StackChartsHandle } from './charts/stack';
 import { fetchServedDataset, fetchDatasetQuality } from '@/quality/data';
@@ -59,6 +66,11 @@ let confoundsChart: ConfoundsChartHandle | null = null;
 let eventsChart: EventsChartHandle | null = null;
 let stackCharts: StackChartsHandle | null = null;
 let storageKey = DEFAULT_LAST_VIEWED_KEY;
+
+// TRIAL: peaks of the loaded scan, and those matching the main channel.
+// Kept here, not in state, so the trial stays in one place and is easy to remove.
+let scanPeaks: PeaksRaw | null = null;
+let channelPeaks: Peak[] = [];
 
 function setLoading(msg: string) {
   els.loading.textContent = msg;
@@ -223,6 +235,9 @@ function buildMainCharts(raw: PhysioRaw, channel: string) {
   state.waveform = { ...NO_ASSESSMENT };
   renderAnnotations();
   renderWaveformAssessment();
+  // TRIAL: peaks for this channel; the toggle shows only when there are some
+  channelPeaks = peaksForChannel(scanPeaks, channel, physioColumns(raw.columns));
+  els.peaksLabel.style.display = channelPeaks.length > 0 ? '' : 'none';
   focusContext = buildFocusContext({
     raw,
     channel,
@@ -230,10 +245,11 @@ function buildMainCharts(raw: PhysioRaw, channel: string) {
     isAnnotateMode: () => state.annotateMode,
     onAnnotate: addAnnotation,
     onXDomainChange: syncLinkedXDomain,
+    drawOverlay: (chart, group, data) => drawPeaks(chart, group, data, els.peaksToggle.checked ? channelPeaks : []),
   });
   if (state.current) loadSavedAnnotations(state.current, channel);
   void refreshAnnotationProgress(); // the count is per channel
-  scatterPanel.setChannel(channel); // one Channel dropdown for both the charts and the scatter plot
+  setScatterChannel(channel); // one Channel dropdown for both the charts and the scatter plot
 }
 
 // "Auxiliary" label: shown while the stacked channels, the events or the confound chart is.
@@ -322,15 +338,17 @@ async function loadPhysio(scan: ScanEntry) {
 
   setLoading('Loading...');
   try {
-    const [raw, confounds, events] = await Promise.all([
+    const [raw, confounds, events, peaks] = await Promise.all([
       fetchPhysioRaw(scan.sub, scan.ses, scan.task, scan.run),
       fetchConfounds(scan.sub, scan.ses, scan.task, scan.run),
       // Rest has no task events; a missing events file is not an error
       isRestTask(scan.task) ? null : fetchEvents(scan.sub, scan.ses, scan.task, scan.run).catch(() => null),
+      fetchPeaks(scan.sub, scan.ses, scan.task, scan.run).catch(() => null), // TRIAL
     ]);
     state.raw = raw;
     state.confounds = confounds;
     state.events = events;
+    scanPeaks = peaks;
     state.current = { ...scan };
     scatterPanel.setCurrentScan(state.current); // its point turns pinkish red
 
@@ -438,6 +456,9 @@ els.channelSelect.addEventListener('change', () => {
   rememberLastViewed();
 });
 
+// TRIAL: show or hide the peak dots on the main chart
+els.peaksToggle.addEventListener('change', () => focusContext?.redrawOverlay());
+
 els.eventsSelect.addEventListener('change', () => {
   if (state.raw && state.events) rebuildEvents(state.events, state.raw);
   rememberLastViewed();
@@ -506,12 +527,28 @@ async function loadQualityMetrics() {
   const served = await fetchServedDataset().catch(() => null);
   if (!served) return;
   const data = await fetchDatasetQuality(served.id).catch(() => null);
+  summaryMetrics = data ? { found: true, lastRun: data.lastRun } : { found: false };
+  refreshSummary();
   if (!data) return;
   els.statsTab.style.display = '';
   els.scatterSection.style.display = ''; // visible before drawing, so the plot takes the section's width
   scatterPanel.setCurrentScan(state.current); // highlight the scan already open, if any
-  scatterPanel.setChannel(els.channelSelect.value); // same channel as the charts above
+  setScatterChannel(els.channelSelect.value); // same channel as the charts above
   scatterPanel.show(data);
+}
+
+// Dataset summary: the facts arrive separately (dataset info with the BIDS structure check, quality metrics)
+let summaryCount: PhysioFileCount | undefined;
+let summaryMetrics: MetricsStatus | undefined;
+let summaryStructure: BidsStructure | undefined;
+function refreshSummary() {
+  renderSummary(els.datasetSummary, els.datasetSummaryLines, summaryCount, summaryMetrics, summaryStructure);
+}
+
+/** Plot the scatter for this channel and name it in the heading */
+function setScatterChannel(channel: string) {
+  els.scatterChannel.textContent = channel;
+  scatterPanel.setChannel(channel);
 }
 
 // ── Init ────────────────────────────────────────────────
@@ -527,6 +564,9 @@ async function init() {
   state.subjects = subjects;
   state.scans = scans;
   renderDatasetInfo(els.datasetInfo, datasetInfo);
+  summaryCount = datasetInfo?.physioFiles;
+  summaryStructure = datasetInfo?.structure;
+  refreshSummary();
 
   // Keep the last session's channel, confound and stacked channels
   storageKey = lastViewedKey(datasetInfo?.name);

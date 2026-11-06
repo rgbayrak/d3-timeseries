@@ -14,6 +14,7 @@ import {
   drawOnsetMarker,
   attachHover,
 } from './shared';
+import type { GroupSelection } from './shared';
 
 export interface FocusContextOptions {
   raw: PhysioRaw;
@@ -24,12 +25,16 @@ export interface FocusContextOptions {
   onAnnotate: (domain: [number, number]) => void;
   /** The focus chart's time window changed (zoom, brush, reset) */
   onXDomainChange: (domain: [number, number]) => void;
+  /** Extra marks on the focus chart (e.g. the peaks trial), redrawn with the signal line */
+  drawOverlay?: (chart: ChartInstance, group: GroupSelection, data: DataPoint[]) => void;
 }
 
 export interface FocusContextHandle {
   focusChart: ChartInstance;
   getXDomain: () => [number, number];
   redrawAnnotations: () => void;
+  /** Redraw the drawOverlay marks (e.g. after a toggle) */
+  redrawOverlay: () => void;
   destroy: () => void;
 }
 
@@ -104,6 +109,7 @@ export function buildFocusContext(opts: FocusContextOptions): FocusContextHandle
     .attr('stroke', '#4a9e6f')
     .attr('stroke-width', 1)
     .attr('opacity', 0.6);
+  const overlayGroup = focusLayers.content.append('g').attr('class', 'focus-overlay');
   const focusOnsetGroup = focusLayers.content.append('g').attr('class', 'onset-marker');
   const contextOnsetGroup = contextLayers.content.append('g').attr('class', 'onset-marker');
 
@@ -114,7 +120,12 @@ export function buildFocusContext(opts: FocusContextOptions): FocusContextHandle
     const visible = cullToViewport(data, xDomainOf(focus), (d: DataPoint) => d.time);
     fitYToVisible(focus, visible);
     drawLine(focusLinePath, focus, visible);
+    drawOverlay(); // after fitYToVisible, so the marks use the new y scale
     drawOnsetMarker(focus, focusOnsetGroup, true);
+  }
+
+  function drawOverlay() {
+    opts.drawOverlay?.(focus, overlayGroup, data);
   }
 
   function drawContextLine() {
@@ -309,6 +320,7 @@ export function buildFocusContext(opts: FocusContextOptions): FocusContextHandle
     focusChart: focus,
     getXDomain: () => xDomainOf(focus),
     redrawAnnotations: drawAnnotationBoxes,
+    redrawOverlay: drawOverlay,
     destroy() {
       zoom.destroy();
       brush?.destroy();

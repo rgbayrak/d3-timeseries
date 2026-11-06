@@ -1,3 +1,6 @@
+import type { DescriptionNotice } from './dataset-notice';
+import type { BidsStructure } from './bids-structure';
+
 export interface SubjectInfo {
   id: string;
   sessions: string[];
@@ -59,6 +62,20 @@ export interface DatasetInfo {
   authors: string[];
   doi: string | null;
   derivatives: { name: string; version: string | null }[];
+  /** Where the title and authors came from, and what to fix; absent from metrics computed before it existed */
+  description?: DescriptionNotice;
+  /** Added by the dev server; absent from the copy in the quality metrics' dataset.json */
+  physioFiles?: PhysioFileCount;
+  /** Added by the dev server: file and folder names checked against the declared BIDS version */
+  structure?: BidsStructure;
+}
+
+/** Physio files the dataset lists and how many are downloaded (from /api/bids/dataset) */
+export interface PhysioFileCount {
+  onDisk: number;
+  downloaded: number;
+  /** How "downloaded" was decided: git-annex or files on disk */
+  source: string;
 }
 
 export async function fetchDatasetInfo(): Promise<DatasetInfo | null> {
@@ -153,6 +170,23 @@ export interface EventsRaw {
 
 export async function fetchEvents(sub: string, ses: string, task: string, run: string): Promise<EventsRaw | null> {
   const res = await fetch(`/api/bids/events?sub=${sub}&ses=${ses}&task=${task}&run=${run}`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+/** TRIAL: detected and corrected peaks from a physprep-style events file */
+export interface PeaksRaw {
+  filename: string;
+  /** Peak times (s), on the same axis as the events onsets */
+  time: number[];
+  /** Channel each peak belongs to, as written in the file (e.g. ECG, PPG) */
+  channel: string[];
+  /** true for *_peak_corrected rows, false for the detected *_peak rows */
+  corrected: boolean[];
+}
+
+export async function fetchPeaks(sub: string, ses: string, task: string, run: string): Promise<PeaksRaw | null> {
+  const res = await fetch(`/api/bids/peaks?sub=${sub}&ses=${ses}&task=${task}&run=${run}`);
   if (!res.ok) return null;
   return res.json();
 }
