@@ -43,7 +43,16 @@ describe('scan shared with Explore and Annotate', () => {
     const store = memoryStorage();
     saveLastViewed(
       lastViewedKey(NAME),
-      { sub: '01', ses: '01', task: 'rest', run: '', channel: 'respiratory', confound: 'dvars', stacked: ['cardiac'] },
+      {
+        sub: '01',
+        ses: '01',
+        task: 'rest',
+        run: '',
+        channel: 'respiratory',
+        confound: 'dvars',
+        event: 'trial_type',
+        stacked: ['cardiac'],
+      },
       store,
     );
     shareScanWithViewer(NAME, { sub: '05', ses: '02', task: 'rest', run: '' }, store);
@@ -54,6 +63,7 @@ describe('scan shared with Explore and Annotate', () => {
       run: '',
       channel: 'respiratory',
       confound: 'dvars',
+      event: 'trial_type',
       stacked: ['cardiac'],
     });
   });
@@ -68,6 +78,7 @@ describe('scan shared with Explore and Annotate', () => {
       run: '',
       channel: '',
       confound: '',
+      event: '',
       stacked: [],
     });
     expect(viewerScan(null, store)).toEqual({ sub: '02', ses: '', task: 'motor', run: '' });

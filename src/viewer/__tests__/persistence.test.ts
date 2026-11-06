@@ -31,7 +31,13 @@ const scans = [
   { sub: '02', ses: '01', task: 'rest', run: '01' },
 ];
 
-const saved: LastViewed = { ...scans[1], channel: 'respiratory', confound: 'rot_x', stacked: ['cardiac'] };
+const saved: LastViewed = {
+  ...scans[1],
+  channel: 'respiratory',
+  confound: 'rot_x',
+  event: 'trial_type',
+  stacked: ['cardiac'],
+};
 
 describe('last-viewed storage', () => {
   it('scopes the key per dataset', () => {
@@ -60,11 +66,17 @@ describe('last-viewed storage', () => {
 });
 
 describe('resumeFrom', () => {
-  it('resumes the saved scan with its channel, confound and stack', () => {
+  it('resumes the saved scan with its channel, confound, events column and stack', () => {
     expect(resumeFrom(saved, scans)).toEqual({
       scan: scans[1],
-      selection: { channel: 'respiratory', confound: 'rot_x', stacked: ['cardiac'] },
+      selection: { channel: 'respiratory', confound: 'rot_x', event: 'trial_type', stacked: ['cardiac'] },
     });
+  });
+
+  it('treats entries saved before the events figure existed as no events column', () => {
+    const old: LastViewed = { ...saved };
+    delete old.event;
+    expect(resumeFrom(old, scans)?.selection.event).toBe('');
   });
 
   it('returns null when the saved scan is no longer in the dataset', () => {

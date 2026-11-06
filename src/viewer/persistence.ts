@@ -8,6 +8,8 @@ import type { RestoredSelection } from './state';
 export interface LastViewed extends ScanEntry {
   channel: string;
   confound: string;
+  /** Events column; absent in entries saved before the events figure existed */
+  event?: string;
   /** Absent in entries saved before stacked channels existed */
   stacked?: string[];
 }
@@ -60,6 +62,7 @@ export function resumeFrom(
     selection: {
       channel: saved.channel,
       confound: saved.confound,
+      event: typeof saved.event === 'string' ? saved.event : '',
       stacked: Array.isArray(saved.stacked) ? saved.stacked : [],
     },
   };

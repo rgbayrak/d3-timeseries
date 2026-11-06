@@ -8,6 +8,7 @@ import { createIndividualTab } from './individual-tab';
 import { buildQualityReport } from './report';
 import { createMetricPicker } from './metric-picker';
 import { esc, parseVisibleMetrics, serializeVisibleMetrics } from './model';
+import { runSentence } from './run-log';
 import { fetchDatasetInfo } from '@/data/bids-physio-reader';
 import { renderDatasetInfo } from '@/viewer/info';
 import type { VisibleMetrics } from './model';
@@ -24,6 +25,9 @@ function byId<T extends HTMLElement>(id: string): T {
 
 const els = {
   reportStatus: byId<HTMLElement>('report-status'),
+  /** "Quality metrics were last computed on … for 78 of 120 scans …" */
+  metricsRun: byId<HTMLElement>('metrics-run'),
+  metricsRunBlock: byId<HTMLElement>('metrics-run-block'),
   datasetInfo: byId<HTMLElement>('dataset-info'),
   status: byId<HTMLElement>('status'),
   /** "Open this scan in Explore and Annotate" */
@@ -164,6 +168,9 @@ async function init() {
     return;
   }
   setStatus('');
+  // When the metrics were last computed, and for how many of the listed scans
+  els.metricsRun.textContent = data.lastRun ? runSentence(data.lastRun) : '';
+  els.metricsRunBlock.style.display = data.lastRun ? '' : 'none';
   showScanFromHash();
   void ensureReport(); // after the scan is drawn, so the page is usable while it builds
 }

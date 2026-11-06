@@ -5,19 +5,30 @@
    --tab-accent (stripe on the open tab; any background, e.g. a gradient) to
    take on its own theme; tab labels use the shared text colours. */
 
+/* IBM Plex Sans, bundled with the app (npm @fontsource/ibm-plex-sans), so it
+   works offline and looks the same on every machine: regular for text,
+   semi-bold for titles, labels and buttons, bold for the dataset name */
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/600.css';
+@import '@fontsource/ibm-plex-sans/700.css';
+
 /* ── Text: one font, size scale and set of colours on every tab ──
    Pages never set their own text sizes, colours or fonts: they use these
    tokens, and keep their accent colours for the tab stripe, charts and
-   highlights only. To make all text bigger or smaller, change the five sizes. */
+   highlights only. To make all text bigger or smaller, change the --fs-* sizes. */
 :root {
-  --fs-xl: 18px; /* dataset name */
-  --fs-lg: 16px; /* headings, labels, dropdowns, text boxes */
+  --fs-dataset: 23px; /* dataset name: the page's largest text, above the titles */
+  --fs-title: 22px; /* section and block titles (h2, h3, .section-label) */
+  --fs-xl: 18px; /* folder tabs */
+  --fs-lg: 16px; /* labels, dropdowns, text boxes */
   --fs-md: 15px; /* body text, buttons, file names, axis titles */
-  --fs-sm: 14px; /* notes, section labels, badges, tables, tooltips */
+  --fs-sm: 14px; /* notes, badges, tables, tooltips */
   --fs-xs: 13px; /* percentiles under table values, axis ticks, chart marker labels */
-  --text: #222;   /* main text, values, headings */
-  --text-2: #5a636b; /* labels, section labels, secondary text */
+  --text: #222;   /* main text, values */
+  --text-2: #5a636b; /* titles and sub-titles, labels, secondary text */
   --text-3: #888; /* notes, hints, empty states */
+  /* Text font: IBM Plex Sans (imported above); the system font only while it loads */
+  --font: 'IBM Plex Sans', system-ui, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --link: #2d6da3; /* links and focus outlines */
   --control: #3d4f63; /* checked checkboxes and active buttons */
@@ -26,7 +37,7 @@
 }
 
 body {
-  font-family: sans-serif;
+  font-family: var(--font);
   color: var(--text);
   background: #fff;
   accent-color: var(--control); /* checkboxes */
@@ -35,30 +46,27 @@ body {
   overflow-anchor: none;
 }
 
-h3 {
-  font-size: var(--fs-lg);
-  font-weight: 600;
-  color: var(--text);
+/* Titles: one font, size, weight and colour for every section and block
+   title on every tab, whatever element it is */
+h2,
+h3,
+.section-label {
+  font: 600 var(--fs-title)/1.3 var(--font);
+  color: var(--text-2); /* muted dark grey, softer than the text under it */
 }
 
-h4 {
-  font-size: var(--fs-md);
-  font-weight: 600;
-  color: var(--text);
+/* Sub-titles: parts of a section (A. Full Recording, Signal of interest, …),
+   same font, weight and colour as the titles, one step smaller */
+h4,
+.subsection-label {
+  font: 600 var(--fs-md)/1.3 var(--font);
+  color: var(--text-2);
 }
 
 /* Notes and hints under headings */
 .muted {
   font-size: var(--fs-sm);
   color: var(--text-3);
-}
-
-/* Small uppercase label for a section or sidebar block, in the tabs' lettering */
-.section-label {
-  font: 600 var(--fs-sm)/1.5 sans-serif;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-2);
 }
 
 a {
@@ -69,7 +77,7 @@ a {
 select,
 input[type='text'],
 textarea {
-  font: var(--fs-lg)/1.3 sans-serif;
+  font: var(--fs-lg)/1.3 var(--font);
   color: var(--text);
   background: #fff;
   border: 1px solid #ccc;
@@ -140,7 +148,11 @@ summary:focus-visible {
   opacity: 0.8;
 }
 
-/* Chart axes (CSS beats the font-size attribute d3 puts on the axis) */
+/* Chart axes (CSS beats the font-size and font-family attributes d3 puts on the axis) */
+.axis {
+  font-family: var(--font);
+}
+
 .axis text {
   font-size: var(--fs-xs);
   fill: var(--text-2);
@@ -166,13 +178,13 @@ summary:focus-visible {
 .folder-tab {
   position: relative;
   margin-bottom: -1px; /* sit on the bar's bottom border */
-  padding: 8px 20px 7px;
+  padding: 10px 24px 9px;
   border: 1px solid #b9c0c6;
   border-bottom: none;
   border-radius: 9px 9px 0 0;
   background: #e9edf0;
   color: var(--text-2);
-  font: 600 var(--fs-sm)/1.2 sans-serif;
+  font: 600 var(--fs-xl)/1.2 var(--font);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   text-decoration: none;
@@ -221,18 +233,18 @@ summary:focus-visible {
 .dataset-header {
   box-sizing: border-box;
   max-width: var(--page-width);
-  height: 56px; /* name line + description line + padding */
+  height: 62px; /* name line + description line + padding */
   margin: 0 auto 12px;
   padding-bottom: 8px;
   border-bottom: 1px solid #ddd;
-  font: var(--fs-md)/20px sans-serif;
+  font: var(--fs-lg)/22px var(--font);
   color: var(--text-2);
   overflow: hidden;
 }
 
 .dataset-header .dataset-name {
-  font-size: var(--fs-xl);
-  line-height: 24px;
+  font-size: var(--fs-dataset);
+  line-height: 28px;
   font-weight: 700;
   color: var(--text);
 }
@@ -246,6 +258,18 @@ summary:focus-visible {
 
 .dataset-header .dataset-meta {
   margin-top: 2px;
+}
+
+/* Missing or placeholder dataset description: what to fix. Same text as the
+   meta line (inherited), but wrapped in full, so the header grows to fit it */
+.dataset-header:has(.dataset-notice) {
+  height: auto;
+  min-height: 62px;
+}
+
+.dataset-header .dataset-notice {
+  margin-top: 2px;
+  overflow-wrap: anywhere;
 }
 
 /* "Now viewing: <file>" line above the graphs, same on every tab that shows one
@@ -318,7 +342,7 @@ summary:focus-visible {
 
 /* Buttons: one style on every page. Add "active" for a toggle that is on. */
 .btn {
-  font: 600 var(--fs-md)/1.3 sans-serif;
+  font: 600 var(--fs-md)/1.3 var(--font);
   padding: 3px 14px;
   cursor: pointer;
   border: 1px solid #8b97a8;

@@ -16,11 +16,12 @@ npm run build      # tsc + vite build (index.html and quality.html)
 
 npx vite-node scripts/compute-quality-metrics.ts <dataset>  # dataset quality metrics -> data/quality/<dataset>/
 npx tsc -p scripts                                           # typecheck scripts/ (outside the root tsconfig)
+npx vite-node scripts/update-bids-rules.ts [x.y.z ...]       # BIDS rules for new releases -> server/schema-rules/
 ```
 
 ### Tests
 
-Tests run against two tiny synthetic BIDS datasets in `test/fixtures/` (sessions/runs with fMRIPrep-style derivatives, and a session-less layout), so they need no downloaded data. They cover every timing badge, sidecar fallbacks, confounds, annotations and path safety, and the dataset quality metrics pipeline (TSV round trip, identical output on reruns, physio channel dictionary, participant axes and the PDF writer). Regenerate the fixtures after changing them with:
+Tests run against two tiny synthetic BIDS datasets in `test/fixtures/` (sessions/runs with fMRIPrep-style derivatives, and a session-less layout), so they need no downloaded data. They cover every timing badge, sidecar fallbacks, confounds (fMRIPrep and MRIQC names), task events and their inheritance, the trial peaks, downloaded-file counts, annotations and path safety, and the dataset quality metrics pipeline (including the run log) (TSV round trip, identical output on reruns, physio channel dictionary, participant axes and the PDF writer). Regenerate the fixtures after changing them with:
 
 ```bash
 python3 test/fixtures/make_fixtures.py
@@ -56,14 +57,18 @@ src/
 │   ├── annotations.ts         # Annotation model <-> stored JSON (pure)
 │   ├── annotation-panel.ts    # Annotation list rendering, HTML escaping
 │   ├── sqi-table.ts           # Metric labels, groups and number format (used by the scatter plot, Stats and the PDF)
-│   ├── info.ts                # Dataset info line, timing/quality badges
+│   ├── info.ts                # Dataset info line, On disk data summary, timing/quality badges
 │   ├── controls.ts            # Dropdowns, stacked-channel checkboxes
 │   ├── navigation.ts          # Prev/next stepping, search resolution (pure)
 │   ├── persistence.ts         # Last-viewed scan in localStorage
+│   ├── events.ts              # Events columns: rest check, categories, counters, default column (pure)
+│   ├── peaks-trial.ts         # TRIAL: match physprep peaks to the picked channel (pure)
 │   └── charts/
 │       ├── shared.ts          # Line drawing, y-fit, onset marker, hover readout
-│       ├── focus-context.ts   # Focus + overview charts, brush-to-zoom, annotation boxes
+│       ├── focus-context.ts   # Focus + overview charts, brush-to-zoom, annotation boxes, overlay layer
 │       ├── confounds.ts       # Confound chart, FD severity coloring
+│       ├── events.ts          # Events chart: one lane per category, blocks from onset to onset + duration
+│       ├── peaks-trial.ts     # TRIAL: peak dots drawn on the focus chart's overlay
 │       └── stack.ts           # Stacked channel charts
 ├── quality/                   # Quality metrics: the Stats tab (quality.html; only main.ts touches that page) and the scatter plot in Explore and Annotate
 │   ├── main.ts                # Stats entry: #scan?… link, dataset loading, builds and saves the PDF report once
@@ -80,9 +85,10 @@ src/
 │   ├── route.ts               # /quality.html#scan?sub=… links (pure)
 │   ├── metric-picker.ts       # "Metrics shown" sidebar list: show/hide each metric
 │   ├── linked-scan.ts         # Shares the open scan with Explore and Annotate (via its localStorage entry)
+│   ├── run-log.ts             # quality_runs.tsv: one line per metrics run, and its sentence (pure; also used by the script)
 │   └── data.ts                # Fetches the served dataset's data/quality/ files
 ├── shell/
-│   └── tabs.css               # Page shell shared by index.html and quality.html: folder tabs, dataset header, text styles, .btn, "Now viewing" line
+│   └── tabs.css               # Page shell shared by index.html and quality.html: font (IBM Plex Sans), text tokens, titles, folder tabs, dataset header, .btn, "Now viewing" line
 ├── utils/
 │   ├── uid.ts              # Unique ID generator
 │   ├── margin.ts           # Margin defaults/merge
@@ -92,7 +98,9 @@ src/
 
 server/
 ├── bids-layout.ts          # Pure BIDS filesystem logic (testable, no Vite dependency)
-├── bids-physio-plugin.ts   # Thin Vite plugin wrapper importing from bids-layout
+├── bids-physio-plugin.ts   # Thin Vite plugin wrapper importing from bids-layout (reads the dataset once the dev server listens)
+├── availability.ts         # Physio files listed vs downloaded (git annex find, else the file's content)
+├── quality-run-log.ts      # Appends a run's line to data/quality/<dataset>/quality_runs.tsv
 └── quality-metrics.ts      # Dataset-wide quality metrics: computes and writes data/quality/<dataset>/
 
 scripts/
@@ -108,7 +116,7 @@ BIDS dataset on disk
   ↓  Returns compact column-array JSON via /api/bids/* endpoints
   ↓
 Browser (src/data/bids-physio-reader.ts)
-  ↓  fetchDatasetInfo(), fetchSubjects(), fetchScans(), fetchTasks(), fetchRuns(), fetchPhysioRaw(), fetchConfounds()
+  ↓  fetchDatasetInfo(), fetchSubjects(), fetchScans(), fetchTasks(), fetchRuns(), fetchPhysioRaw(), fetchConfounds(), fetchEvents(), fetchPeaks() (trial)
   ↓  toDataPoints() / toConfoundPoints() materialize {time, value}[] arrays
   ↓
 SQI (src/data/sqi-metrics.ts)
@@ -118,7 +126,7 @@ SQI (src/data/sqi-metrics.ts)
   ↓
 Viewer (src/viewer/)
   ↓  main.ts holds the state and wires events; charts/ builds focus+context,
-  ↓  stacked and confounds charts and keeps them on one time window
+  ↓  stacked, events and confounds charts and keeps them on one time window
 ```
 
 Dataset quality metrics run offline and are served as static files, not through the API:
@@ -127,7 +135,8 @@ Dataset quality metrics run offline and are served as static files, not through 
 BIDS dataset on disk
   ↓  scripts/compute-quality-metrics.ts → server/quality-metrics.ts
   ↓  readPhysio() for every scan, keep physiological columns (src/quality/channels.ts), computeSQI()
-  ↓  writes data/quality/<dataset>/quality_metrics.tsv, dataset.json, waveforms/*.json
+  ↓  writes data/quality/<dataset>/quality_metrics.tsv, dataset.json, waveforms/*.json,
+  ↓  and appends one line to quality_runs.tsv (scans computed / listed / failed)
   ↓
 Browser (src/quality/)
   ↓  asks /api/bids/dataset which dataset the server serves (its `id`), then
@@ -140,12 +149,14 @@ Browser (src/quality/)
 | Endpoint | Description |
 |---|---|
 | `GET /api/bids/subjects` | All subjects with their sessions (only those with readable physio files) |
-| `GET /api/bids/dataset` | Dataset metadata from `dataset_description.json` (raw + derivatives `GeneratedBy`), plus `id`: the dataset's folder name under `data/` |
+| `GET /api/bids/dataset` | Dataset metadata from `dataset_description.json` (raw + derivatives `GeneratedBy`), plus `id`: the dataset's folder name under `data/`, and `physioFiles`: `{ onDisk, downloaded, source }`, physio files listed vs downloaded, counted once at startup, and `structure`: file and folder names checked against the rules of the declared `BIDSVersion` (`server/bids-structure.ts`) |
 | `GET /api/bids/scans` | Flat list of every readable `{sub, ses, task, run}` in hierarchy order |
 | `GET /api/bids/tasks?sub=&ses=` | Tasks available for a given subject/session |
 | `GET /api/bids/runs?sub=&ses=&task=` | Runs available for a given subject/session/task |
 | `GET /api/bids/physio?sub=&ses=&task=&run=` | Physio data as compact column arrays, plus the timing check result (`timing`) |
-| `GET /api/bids/confounds?sub=&ses=&task=&run=` | Motion confounds (FD, RMSD, DVARS, trans/rot) from fMRIPrep confounds TSV |
+| `GET /api/bids/confounds?sub=&ses=&task=&run=` | Motion confounds (FD, RMSD, DVARS, trans/rot) from the fMRIPrep or MRIQC confounds TSV; `null` (200) when the scan has none |
+| `GET /api/bids/events?sub=&ses=&task=&run=` | Task events `{ filename, onset, duration, columns }` from the imaging folders (BIDS inheritance: run, run-less, top-level); `null` (200) when there are none |
+| `GET /api/bids/peaks?sub=&ses=&task=&run=` | TRIAL: detected and corrected peaks `{ filename, time, channel, corrected }` from a physprep-style events file next to the physio; `null` when there are none |
 | `GET /api/bids/annotations?sub=&ses=&task=&run=&channel=` | Stored annotations for a scan/channel, if any |
 | `POST /api/bids/annotations` | Saves (overwrites) annotations for a scan/channel |
 | `GET /api/quality-report` | `{ exists, url }`: whether the served dataset's `data/quality/<dataset>/quality_report.pdf` is saved |
@@ -154,7 +165,7 @@ Browser (src/quality/)
 
 The server skips broken symlinks (e.g. DataLad/git-annex files that haven't been fetched) using `accessSync(R_OK)`.
 
-Confounds are read from the derivatives root (`BIDSDER_ROOT` env var, default `$BIDS_ROOT/derivatives/fmriprep`). The server looks for `*_desc-confounds_timeseries.tsv[.gz]` and extracts the motion columns (`framewise_displacement`, `rmsd`, `dvars`, `std_dvars`, `trans_*`, `rot_*`); the **Confound** dropdown picks which one to plot and only appears when a confounds file is found.
+Confounds are read from the derivatives root: `BIDSDER_ROOT` when set, else the folder inside `$BIDS_ROOT/derivatives/` that has confounds files, preferring fMRIPrep's over MRIQC's (`resolveBidsRoots`). The server looks for, in order, fMRIPrep's `*_desc-confounds_timeseries.tsv[.gz]`, the older `*_desc-confounds_regressors.tsv` and `*_bold_confounds.tsv`, then MRIQC's `*_timeseries.tsv` (lowest echo for multi-echo runs), and extracts the motion columns (`framewise_displacement`, `rmsd`, `dvars`, `std_dvars`, `trans_*`, `rot_*`); the **Confound** dropdown picks which one to plot and only appears when a confounds file is found.
 
 Annotations are written as JSON files under `ANNOTATIONS_ROOT` (env var, default `data/annotations/` in the project root), one file per `{sub, ses, task, run, channel}`, mirroring the `sub-XX/ses-XX/` BIDS directory structure. Each file starts with the full-recording `waveform_quality` (`good`, `bad`, `fixable`, `unknown` or `null`) and `waveform_comment` (Notes), followed by the scan, `sampling_rate` and the time windows in `annotations`. Files saved before these two fields existed still load.
 
@@ -168,7 +179,7 @@ How the server and viewer line up physio, confounds and triggers in time is desc
 - **Functional factory pattern** — no classes, composable, idiomatic D3.
 - **No component framework (Vue/React)** — vanilla D3+TS holds up as long as state stays centralized (a single object for current scan/selection/annotations) and render functions stay pure/redraw-from-state. Revisit only if hand-rolled DOM diff/patch logic becomes unavoidable, not because of codebase size alone.
 - **Viewer modules don't reach into the page** — only `src/viewer/main.ts` looks up elements and owns the `ViewerState`; every other viewer module receives elements and data as arguments and has no import-time DOM access, so its logic is unit-tested in Node (`src/viewer/__tests__/`). The quality page follows the same rule: only `src/quality/main.ts` touches `quality.html`, and the pure modules are tested in `src/quality/__tests__/`.
-- **One text style everywhere** — every change keeps text font, size and colour matched across pages. Use only the shared tokens in `src/shell/tabs.css` (`--fs-xl` … `--fs-xs`, `--text`, `--text-2`, `--text-3`, `--mono`), never a page-specific font size, family or text colour. Within a section, text under its heading (description, labels, dropdowns, legend, notes) is one size and one colour. File and channel names use the shared code style (`.now-viewing-file`, `.channel-name`).
+- **One text style everywhere** — every change keeps text font, size and colour matched across pages. Use only the shared tokens in `src/shell/tabs.css` (`--fs-dataset`, `--fs-title`, `--fs-xl` … `--fs-xs`, `--text`, `--text-2`, `--text-3`, `--font`, `--mono`), never a page-specific font size, family or text colour. Titles (`h2`, `h3`, `.section-label`) share one style, and sub-titles (`h4`, `.subsection-label`) one a step smaller, both in `--text-2`. Within a section, text under its heading (description, labels, dropdowns, legend, notes) is one size and one colour. File and channel names use the shared code style (`.now-viewing-file`, `.channel-name`).
 
 ---
 
@@ -376,6 +387,10 @@ Only individual D3 modules (no monolithic `d3` package):
 
 `d3-selection`, `d3-scale`, `d3-axis`, `d3-shape`, `d3-array`, `d3-time`, `d3-time-format`, `d3-zoom`, `d3-brush`, `d3-transition`
 
+Plus `@fontsource/ibm-plex-sans`, the page font, bundled so it works offline (imported in `src/shell/tabs.css`).
+
+The BIDS version check (`server/bids-structure.ts`) needs no package: its rules are JSON files in `server/schema-rules/`, one per BIDS version, cut down from the official [BIDS schema](https://github.com/bids-standard/bids-schema) (`server/bids-rules.ts` describes the format). 1.8.0 and later are written by `scripts/update-bids-rules.ts` from each version's compiled `schema.json`; 1.6.0 and 1.7.0, which only have the schema's YAML sources, were converted once by hand into the same format, and older versions can be added the same way. `.github/workflows/bids-rules.yml` runs the script weekly and opens a pull request when a new BIDS release appears.
+
 ---
 
 ## TODO / Improvements
@@ -409,7 +424,13 @@ Research features and improvements. Publication readiness (license, packaging, d
 ### Performance & data pipeline
 
 - [ ] Downsample focus-chart line rendering — currently draws every raw sample in the visible domain (1M+ points at full zoom-out for 1000–5000 Hz recordings); only the context chart is downsampled today. Needs a min/max-per-bucket downsampler (a naive stride, like `viewportCulling.ts` uses now, would clip cardiac spikes), targeting ~2-4k rendered points at any zoom level. `minMaxEnvelope()` in `src/quality/envelope.ts` already does this for the quality page's waveforms
-- [ ] Cache parsed physio/confounds reads server-side — `server/bids-physio-plugin.ts` re-parses (sync gunzip + full TSV parse) on every request, even when revisiting a scan just seen; add an in-memory cache keyed by sub/ses/task/run
+- [ ] Cache parsed physio/confounds reads server-side — `server/bids-physio-plugin.ts` re-parses (sync gunzip + full TSV parse) on every request, even when revisiting a scan just seen; add an in-memory cache keyed by sub/ses/task/run. Also prefetch the next scan while the current one is viewed, so Next is served from memory
+- [ ] Moving to the next file is slow (unacceptable latency). Not timed yet: first check `/api/bids/physio` in the browser Network tab (Waiting (TTFB) = server time, Size / Content download = JSON cost) and the Performance tab for the chart drawing. Suggested fixes, biggest effect first:
+  - Send physio samples as binary (`Float32Array`, about 4 bytes per value, no parsing) instead of JSON number arrays, which are likely tens of MB per scan at 1000–5000 Hz and parsed in full by the browser (`fetchPhysioRaw`)
+  - Keep columns as typed arrays in the viewer instead of one `{time, value}` object per sample, built again for each stacked channel (`toDataPoints`, `src/viewer/charts/stack.ts`)
+  - Server cache and prefetch (item above) and focus-chart downsampling (first item in this section)
+  - Read the confounds file once per scan: `readPhysio` reads and unzips it to count volumes when the BOLD sidecar has no `VolumeTiming` (`countConfoundVolumes`), then `readConfounds` reads it again (`server/bids-layout.ts`)
+  - Start the data fetch without waiting for the tasks and runs requests in `goToScan` (`src/viewer/main.ts`), which are two round trips before it today
 - [ ] Support custom signals those computations by convolving physiological response functions (Birn et al. 2006/2008 respiration-BOLD, Chang & Glover 2009 cardiac/respiratory response functions)
 - [ ] Production build, the server plugin only works in Vite dev mode; the FastAPI backend planned above should supersede this, otherwise would need an Express/Fastify server for production. That server must also serve `data/quality/` for the quality page
 
@@ -419,26 +440,36 @@ Research features and improvements. Publication readiness (license, packaging, d
 - [ ] Move `src/viewer/sqi-table.ts` to `src/quality/` under a clearer name (e.g. `metric-columns.ts`): it now only holds the metric labels, groups and number format used by the scatter plot, the Stats tab and the PDF
 - [ ] Optional group toggle in "Metrics shown": the group headings are fixed now, so Show all / Hide all are the only bulk controls
 
+### Events, peaks and confounds
+
+- [ ] Peaks (trial): decide whether it stays. If it does, check the timing on movie10 (the dots should sit on the peaks; if they are offset, the peaks file's onsets need the physio `StartTime`), drop the TRIAL labels, and test `drawPeaks`
+- [ ] Events from `physprep/` are ignored for the events chart (only the imaging folders are read); decide whether physprep task events should be offered when the imaging folder has none
+### On disk data summary and the run log
+
+- [ ] The downloaded count is made once when the dev server starts, so files fetched with `datalad get` while it runs only show after a restart; recount on request (it is fast with git-annex) or add a refresh
+- [ ] `scans_available` in `quality_runs.tsv` counts physio files; a dataset with more than one physio file per scan would show too many as "not downloaded"
+- [ ] The Stats PDF report still uses Helvetica (`src/quality/report.ts`); embed IBM Plex Sans so it matches the pages
+- [ ] BIDS version check: fix the two wrong expectations in `server/__tests__/bids-structure.test.ts` (`parseBidsName('sub-01_task')` is a valid name; the fixtures' `*_desc-quality.json` files are reported as "not a BIDS file name", not as a bad suffix)
+- [ ] BIDS version check: run it on the real datasets and in the dev server; decide whether known non-BIDS files such as `*_desc-quality.json` should be skipped instead of reported
+- [ ] BIDS version check: add hand-written rules for versions before 1.6.0 if a source for them is found (same format as `server/schema-rules/`)
+- [ ] Run `.github/workflows/bids-rules.yml` once by hand (workflow_dispatch) to confirm it opens a pull request only when a new BIDS release exists
+
 ### Docs and user study
 
-- [ ] `docs/user-study.md` Part B (tasks 8–13) still describes the Stats Group tab and its histograms, which were removed: the scatter plot is now at the bottom of Explore and Annotate and the tab is called Stats; rewrite those tasks
-- [ ] `docs/user-study.md` task 6 still says "Click **Compute SQI**", which no longer exists; replace it (e.g. find the cardiac channel's SNR on the Stats tab, or rate the full recording's Signal Quality and add Notes)
-- [ ] Add user-study tasks for the new Annotations box (Signal Quality, Notes) and the annotated count
-- [ ] Retake the screenshots in `user_facing/` (e.g. `physviz_sqi.png` shows the removed SQI table) and any in the README or paper for the new layout (sidebar, Annotations box)
-
+- [ ] Retake `docs/physviz.gif` (README) and the images in `user_facing/` and the paper for the current layout: On disk data summary under the Annotations box, the INTERACTIVE QUALITY ASSESSMENT TOOL title, the events chart, the scatter legend to the right and IBM Plex Sans
+- [ ] Add user-study tasks for the events chart and the On disk data summary (`docs/user-study.md`)
 ### BIDS discovery (bottom-up)
 
-- [ ] Find files bottom-up instead of assuming fixed paths under `BIDS_ROOT` (today: `<root>/sub-XX/[ses-YY/]func/`, sidecars at three fixed spots, derivatives at `<root>/derivatives/fmriprep`, plus the `physprep/` → `fmriprep/` special case in `resolveBidsRoots`):
+- [ ] Find files bottom-up instead of assuming fixed paths under `BIDS_ROOT` (today: `<root>/sub-XX/[ses-YY/]func/` and sidecars at three fixed spots; `resolveBidsRoots` finds the physio folder inside `BIDS_ROOT` and the derivatives inside `BIDS_ROOT/derivatives/` by their files, and `BIDSPHYS_ROOT` / `BIDSDER_ROOT` cover folders stored elsewhere):
   - Walk the given folder once at server start (skip hidden folders like `.git`, `.datalad`) and index every `*_physio.tsv.gz` (readable only), `*physio.json`, `*_desc-quality.json`, `*_bold.json`, `*_desc-confounds_timeseries.tsv[.gz]` and `dataset_description.json`
   - Take sub/ses/task/run from each file's name, not its folder, so files are found wherever they sit (extra levels, no `func/`)
   - Sidecars by BIDS inheritance: a sidecar applies if it sits in the data file's folder or above and its entities are a subset of the file's; nearer/more specific wins, values merged
   - Confounds and BOLD timing matched on sub/ses/task/run (run numeric) anywhere in the index; `BIDSDER_ROOT` becomes optional and `resolveBidsRoots` goes away
   - Raw dataset info from the `dataset_description.json` nearest above the physio files, derivatives info from the one above the confounds
   - Same function signatures and API outputs, so the viewer, Stats tab and metrics script don't change
-  - Defaults to confirm: same scan with raw and `desc-preproc` physio → prefer preprocessed; search only inside the given folder (no sibling folders)
-- [ ] Tests for it (`server/__tests__/bids-discovery.test.ts`, temp-folder datasets, never `data/`): CNeuroMod layout given by its parent folder; physio outside `func/` and extra nesting; sidecar inheritance (subject, session, run-less, top-level; most specific wins, merged); numeric run matching and mixed run/run-less; broken symlinks and hidden folders skipped; a root without physio returns no scans instead of crashing; existing fixture and real-dataset tests still pass
+  - Defaults to confirm: same scan with raw and `desc-preproc` physio → prefer preprocessed; search only inside the given folder (no sibling folders)- [ ] Tests for it (`server/__tests__/bids-discovery.test.ts`, temp-folder datasets, never `data/`): CNeuroMod layout given by its parent folder; physio outside `func/` and extra nesting; sidecar inheritance (subject, session, run-less, top-level; most specific wins, merged); numeric run matching and mixed run/run-less; broken symlinks and hidden folders skipped; a root without physio returns no scans instead of crashing; existing fixture and real-dataset tests still pass
 
 ### Testing
 
 - [ ] Page-level tests under jsdom for the wiring in `src/viewer/main.ts` and `src/quality/main.ts`: Signal Quality buttons toggle and save, Notes save on blur and never to another scan, the progress line updates after a save, Metrics shown redraws without moving the page, Colour by hides when the dataset has nothing to colour by, the Stats tab and scatter plot stay hidden without quality metrics, the viewed scan's point is highlighted (needs `jsdom`, same as the chart-core tests in docs/JOSS-TODO.md)
-- [ ] Add a test suite that runs against every existing dataset under `data/` (`ds000210`, `ds006644`, `movie10`, `shinobi`): subject/session/task/run discovery, physio + confounds reads, scan-onset timing, dataset info, and annotation path resolution (dataset name, `func/` layout). Skip a dataset gracefully when its files aren't downloaded. `server/__tests__/bids-layout.test.ts` already covers `ds006644` and `ds000210`; `movie10` and `shinobi` (raw data in `physprep/`) are still missing
+- [ ] Add a test suite that runs against every existing dataset under `data/` (`ds000210`, `ds004662`, `ds006644`, `movie10`, `friends`): subject/session/task/run discovery, physio + confounds reads, scan-onset timing, dataset info, and annotation path resolution (dataset name, `func/` layout). Skip a dataset gracefully when its files aren't downloaded. `server/__tests__/bids-layout.test.ts` already covers `ds006644` and `ds000210`; `movie10` and `friends` (raw data in `physprep/`) and `ds004662` (task events, MRIQC confounds via `BIDSDER_ROOT=data/ds004662/ds004662-mriqc`) are still missing

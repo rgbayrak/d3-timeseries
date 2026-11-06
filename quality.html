@@ -69,7 +69,7 @@
       gap: 16px;
     }
 
-    /* Sidebar block titles use the shared .section-label lettering */
+    /* Sidebar block titles use the shared title style (.section-label, tabs.css) */
     .sidebar .section-label {
       margin-bottom: 6px;
     }
@@ -406,6 +406,12 @@
         <div class="side-block">
           <div class="section-label">Recording details</div>
           <div id="subject-scan"></div>
+        </div>
+
+        <!-- Last line of quality_runs.tsv (src/quality/run-log.ts); hidden for metrics computed before the log existed -->
+        <div class="side-block" id="metrics-run-block" style="display:none">
+          <div class="section-label">Last metrics run</div>
+          <div id="metrics-run" class="report-status muted"></div>
         </div>
 
         <!-- Built and saved once per computed dataset (src/quality/main.ts) -->

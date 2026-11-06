@@ -4,12 +4,14 @@ import {
   fetchDatasetInfo,
   fetchPhysioRaw,
   fetchConfounds,
+  fetchEvents,
+  fetchPeaks,
   fetchAnnotations,
   fetchAnnotationProgress,
   saveAnnotations,
   getViewExtent,
 } from '@/data/bids-physio-reader';
-import type { ScanEntry, PhysioRaw, ConfoundsRaw } from '@/data/bids-physio-reader';
+import type { ScanEntry, PhysioRaw, ConfoundsRaw, EventsRaw, PeaksRaw } from '@/data/bids-physio-reader';
 import { getElements } from './dom';
 import { createState, sameScan } from './state';
 import {
@@ -22,7 +24,10 @@ import {
 } from './annotations';
 import type { WaveformQuality } from '@/data/bids-physio-reader';
 import { renderAnnotationList, progressColor, escapeHtml } from './annotation-panel';
-import { renderDatasetInfo, renderQualityBadges } from './info';
+import { renderDatasetInfo, renderQualityBadges, renderSummary } from './info';
+import type { MetricsStatus } from './info';
+import type { PhysioFileCount } from '@/data/bids-physio-reader';
+import type { BidsStructure } from '@/data/bids-structure';
 import {
   populateSelect,
   populateTasks,
@@ -38,6 +43,12 @@ import { buildFocusContext } from './charts/focus-context';
 import type { FocusContextHandle } from './charts/focus-context';
 import { buildConfoundsChart } from './charts/confounds';
 import type { ConfoundsChartHandle } from './charts/confounds';
+import { buildEventsChart } from './charts/events';
+import type { EventsChartHandle } from './charts/events';
+import { isRestTask, defaultEventColumn, usefulEventColumns } from './events';
+import { peaksForChannel } from './peaks-trial';
+import type { Peak } from './peaks-trial';
+import { drawPeaks } from './charts/peaks-trial';
 import { buildStackCharts } from './charts/stack';
 import type { StackChartsHandle } from './charts/stack';
 import { fetchServedDataset, fetchDatasetQuality } from '@/quality/data';
@@ -52,8 +63,14 @@ const state = createState();
 
 let focusContext: FocusContextHandle | null = null;
 let confoundsChart: ConfoundsChartHandle | null = null;
+let eventsChart: EventsChartHandle | null = null;
 let stackCharts: StackChartsHandle | null = null;
 let storageKey = DEFAULT_LAST_VIEWED_KEY;
+
+// TRIAL: peaks of the loaded scan, and those matching the main channel.
+// Kept here, not in state, so the trial stays in one place and is easy to remove.
+let scanPeaks: PeaksRaw | null = null;
+let channelPeaks: Peak[] = [];
 
 function setLoading(msg: string) {
   els.loading.textContent = msg;
@@ -75,6 +92,7 @@ function rememberLastViewed() {
     ...state.current,
     channel: els.channelSelect.value,
     confound: els.confoundSelect.value,
+    event: els.eventsSelect.value,
     stacked: state.stackedChannels,
   });
 }
@@ -191,15 +209,18 @@ function removeAnnotation(id: string) {
 /** Push the focus chart's time window to every chart that follows it */
 function syncLinkedXDomain(domain: [number, number]) {
   confoundsChart?.setXDomain(domain);
+  eventsChart?.setXDomain(domain);
   stackCharts?.setXDomain(domain);
 }
 
 function destroyCharts() {
   focusContext?.destroy();
   confoundsChart?.destroy();
+  eventsChart?.destroy();
   stackCharts?.destroy();
   focusContext = null;
   confoundsChart = null;
+  eventsChart = null;
   stackCharts = null;
 }
 
@@ -214,6 +235,9 @@ function buildMainCharts(raw: PhysioRaw, channel: string) {
   state.waveform = { ...NO_ASSESSMENT };
   renderAnnotations();
   renderWaveformAssessment();
+  // TRIAL: peaks for this channel; the toggle shows only when there are some
+  channelPeaks = peaksForChannel(scanPeaks, channel, physioColumns(raw.columns));
+  els.peaksLabel.style.display = channelPeaks.length > 0 ? '' : 'none';
   focusContext = buildFocusContext({
     raw,
     channel,
@@ -221,30 +245,33 @@ function buildMainCharts(raw: PhysioRaw, channel: string) {
     isAnnotateMode: () => state.annotateMode,
     onAnnotate: addAnnotation,
     onXDomainChange: syncLinkedXDomain,
+    drawOverlay: (chart, group, data) => drawPeaks(chart, group, data, els.peaksToggle.checked ? channelPeaks : []),
   });
   if (state.current) loadSavedAnnotations(state.current, channel);
   void refreshAnnotationProgress(); // the count is per channel
-  scatterPanel.setChannel(channel); // one Channel dropdown for both the charts and the scatter plot
+  setScatterChannel(channel); // one Channel dropdown for both the charts and the scatter plot
 }
 
-// "Auxiliary" label: shown while the stacked channels or the confound chart is.
+// "Auxiliary" label: shown while the stacked channels, the events or the confound chart is.
 // Those sections show and hide themselves from several places, so watch them.
+const auxiliarySections = [els.stackSection, els.eventsSection, els.confoundsSection];
 function syncAuxiliarySection() {
-  const shown = [els.stackSection, els.confoundsSection].some((el) => el.style.display !== 'none');
+  const shown = auxiliarySections.some((el) => el.style.display !== 'none');
   els.auxiliarySection.style.display = shown ? '' : 'none';
 }
 const auxiliaryObserver = new MutationObserver(syncAuxiliarySection);
-for (const el of [els.stackSection, els.confoundsSection]) {
+for (const el of auxiliarySections) {
   auxiliaryObserver.observe(el, { attributes: true, attributeFilter: ['style'] });
 }
 
-// Auxiliary controls row: shown while its Stack checkboxes or Confound dropdown is
+// Auxiliary controls row: shown while its Event or Confound dropdown or Stack checkboxes are
+const auxRowItems = [els.stackRow, els.eventsLabel, els.confoundLabel];
 function syncAuxRow() {
-  const shown = [els.stackRow, els.confoundLabel].some((el) => el.style.display !== 'none');
+  const shown = auxRowItems.some((el) => el.style.display !== 'none');
   els.auxRow.style.display = shown ? '' : 'none';
 }
 const auxRowObserver = new MutationObserver(syncAuxRow);
-for (const el of [els.stackRow, els.confoundLabel]) {
+for (const el of auxRowItems) {
   auxRowObserver.observe(el, { attributes: true, attributeFilter: ['style'] });
 }
 
@@ -269,6 +296,18 @@ function rebuildConfounds(confounds: ConfoundsRaw, raw: PhysioRaw) {
   });
 }
 
+function rebuildEvents(events: EventsRaw, raw: PhysioRaw) {
+  eventsChart?.destroy();
+  eventsChart = buildEventsChart({
+    sectionEl: els.eventsSection,
+    labelEl: els.eventsFileLabel,
+    legendEl: els.eventsLegend,
+    events,
+    column: els.eventsSelect.value,
+    xDomain: focusContext ? focusContext.getXDomain() : getViewExtent(raw),
+  });
+}
+
 function renderStack(columns: string[]) {
   state.stackedChannels = validStacked(state.stackedChannels, columns, els.channelSelect.value);
   renderStackControls(els, columns, els.channelSelect.value, state.stackedChannels, (channel, checked) => {
@@ -290,6 +329,8 @@ async function loadPhysio(scan: ScanEntry) {
   if (sameScan(state.current, scan) && state.raw) {
     buildMainCharts(state.raw, els.channelSelect.value);
     rebuildStack(state.raw);
+    if (state.events) rebuildEvents(state.events, state.raw);
+    else els.eventsSection.style.display = 'none';
     if (state.confounds) rebuildConfounds(state.confounds, state.raw);
     else els.confoundsSection.style.display = 'none';
     return;
@@ -297,12 +338,17 @@ async function loadPhysio(scan: ScanEntry) {
 
   setLoading('Loading...');
   try {
-    const [raw, confounds] = await Promise.all([
+    const [raw, confounds, events, peaks] = await Promise.all([
       fetchPhysioRaw(scan.sub, scan.ses, scan.task, scan.run),
       fetchConfounds(scan.sub, scan.ses, scan.task, scan.run),
+      // Rest has no task events; a missing events file is not an error
+      isRestTask(scan.task) ? null : fetchEvents(scan.sub, scan.ses, scan.task, scan.run).catch(() => null),
+      fetchPeaks(scan.sub, scan.ses, scan.task, scan.run).catch(() => null), // TRIAL
     ]);
     state.raw = raw;
     state.confounds = confounds;
+    state.events = events;
+    scanPeaks = peaks;
     state.current = { ...scan };
     scatterPanel.setCurrentScan(state.current); // its point turns pinkish red
 
@@ -319,6 +365,27 @@ async function loadPhysio(scan: ScanEntry) {
     renderStack(channels);
     buildMainCharts(raw, els.channelSelect.value);
     rebuildStack(raw);
+
+    // Counters such as trial_number are left out of the dropdown
+    const eventColumns = events ? usefulEventColumns(events) : [];
+    if (events && eventColumns.length > 0) {
+      populateSelect(
+        els.eventsSelect,
+        eventColumns,
+        pickPreferred(eventColumns, [restored?.event, els.eventsSelect.value, defaultEventColumn(events)]),
+      );
+      els.eventsLabel.style.display = '';
+      rebuildEvents(events, raw);
+    } else if (events) {
+      // Only onset/duration (or only counters): draw the events, nothing to pick
+      els.eventsSelect.innerHTML = '';
+      els.eventsLabel.style.display = 'none';
+      rebuildEvents(events, raw);
+    } else {
+      // Rest task or no events file: hide the picker and the figure
+      els.eventsLabel.style.display = 'none';
+      els.eventsSection.style.display = 'none';
+    }
 
     if (confounds) {
       const columns = Object.keys(confounds.columns);
@@ -383,8 +450,17 @@ els.channelSelect.addEventListener('change', () => {
     renderStack(physioColumns(state.raw.columns));
     buildMainCharts(state.raw, els.channelSelect.value);
     rebuildStack(state.raw);
+    if (state.events) rebuildEvents(state.events, state.raw);
     if (state.confounds) rebuildConfounds(state.confounds, state.raw);
   }
+  rememberLastViewed();
+});
+
+// TRIAL: show or hide the peak dots on the main chart
+els.peaksToggle.addEventListener('change', () => focusContext?.redrawOverlay());
+
+els.eventsSelect.addEventListener('change', () => {
+  if (state.raw && state.events) rebuildEvents(state.events, state.raw);
   rememberLastViewed();
 });
 
@@ -451,12 +527,28 @@ async function loadQualityMetrics() {
   const served = await fetchServedDataset().catch(() => null);
   if (!served) return;
   const data = await fetchDatasetQuality(served.id).catch(() => null);
+  summaryMetrics = data ? { found: true, lastRun: data.lastRun } : { found: false };
+  refreshSummary();
   if (!data) return;
   els.statsTab.style.display = '';
   els.scatterSection.style.display = ''; // visible before drawing, so the plot takes the section's width
   scatterPanel.setCurrentScan(state.current); // highlight the scan already open, if any
-  scatterPanel.setChannel(els.channelSelect.value); // same channel as the charts above
+  setScatterChannel(els.channelSelect.value); // same channel as the charts above
   scatterPanel.show(data);
+}
+
+// Dataset summary: the facts arrive separately (dataset info with the BIDS structure check, quality metrics)
+let summaryCount: PhysioFileCount | undefined;
+let summaryMetrics: MetricsStatus | undefined;
+let summaryStructure: BidsStructure | undefined;
+function refreshSummary() {
+  renderSummary(els.datasetSummary, els.datasetSummaryLines, summaryCount, summaryMetrics, summaryStructure);
+}
+
+/** Plot the scatter for this channel and name it in the heading */
+function setScatterChannel(channel: string) {
+  els.scatterChannel.textContent = channel;
+  scatterPanel.setChannel(channel);
 }
 
 // ── Init ────────────────────────────────────────────────
@@ -472,6 +564,9 @@ async function init() {
   state.subjects = subjects;
   state.scans = scans;
   renderDatasetInfo(els.datasetInfo, datasetInfo);
+  summaryCount = datasetInfo?.physioFiles;
+  summaryStructure = datasetInfo?.structure;
+  refreshSummary();
 
   // Keep the last session's channel, confound and stacked channels
   storageKey = lastViewedKey(datasetInfo?.name);

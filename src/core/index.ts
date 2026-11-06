@@ -1,6 +1,6 @@
 export { createChart } from './createChart';
 export { createScale, updateScaleRange } from './scales';
-export { renderAxis, renderGrid } from './axes';
+export { renderAxis, renderGrid, compactNumber } from './axes';
 export { createClipPath, updateClipPath } from './clipPath';
 export { createResizeObserver } from './resize';
 export { createTooltip } from './tooltip';

@@ -1,13 +1,13 @@
 ---
 title: 'physAI-QA-interactive: an interactive visualization and annotation tool for physiological recordings in BIDS fMRI datasets'
 tags:
-  - TypeScript
-  - Python
   - neuroimaging
   - physiological recordings
   - BIDS
   - fMRI
   - signal quality
+  - TypeScript
+  - Python
 authors:
   - name: Roza Gunes Bayrak
     orcid: 0000-0002-7197-1248
@@ -43,8 +43,8 @@ Drafting notes (remove before submission)
 
 physAI-QA-interactive provides a single interface for visualizing, labeling and
 annotating artifacts, both across whole recordings and within time windows. It
-is designed for researchers who curate, quality-check or reuse BIDS datasets
-with concurrent physiological recordings. It replaces dataset-specific in-house
+is designed for researchers who curate, quality-check or reuse BIDS-validated datasets
+with concurrent physiological recordings. It replaces most dataset-specific in-house
 scripts and viewers with one interactive workflow that behaves the same way on
 any BIDS dataset: review every channel of every scan, compute modality-specific
 quality metrics, compare physiological events across modalities, and annotate
@@ -172,7 +172,7 @@ cover:
 
 The software has been developed and tested on public datasets. On
 DMT-HAR-MED (ds006644) [@egger2025dataset; @egger2025], a multi-echo dataset (ds000210) [@dupre2017] 
-and with the CNeuroMod `movie10` and `shinobi` datasets.
+and with the CNeuroMod `movie10` and `friends` datasets.
 
 <!-- TODO: describe any study or lab that uses the tool for its own analyses. -->
 

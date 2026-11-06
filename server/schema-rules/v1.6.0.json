@@ -1,0 +1,1248 @@
+{
+ "bidsVersion": "1.6.0",
+ "source": "https://github.com/bids-standard/bids-schema/tree/main/versions/1.6.0/schema",
+ "entities": [
+  {
+   "name": "subject",
+   "key": "sub"
+  },
+  {
+   "name": "session",
+   "key": "ses"
+  },
+  {
+   "name": "task",
+   "key": "task"
+  },
+  {
+   "name": "acquisition",
+   "key": "acq"
+  },
+  {
+   "name": "ceagent",
+   "key": "ce"
+  },
+  {
+   "name": "tracer",
+   "key": "trc"
+  },
+  {
+   "name": "reconstruction",
+   "key": "rec"
+  },
+  {
+   "name": "direction",
+   "key": "dir"
+  },
+  {
+   "name": "run",
+   "key": "run"
+  },
+  {
+   "name": "modality",
+   "key": "mod"
+  },
+  {
+   "name": "echo",
+   "key": "echo"
+  },
+  {
+   "name": "flip",
+   "key": "flip"
+  },
+  {
+   "name": "inversion",
+   "key": "inv"
+  },
+  {
+   "name": "mtransfer",
+   "key": "mt"
+  },
+  {
+   "name": "part",
+   "key": "part"
+  },
+  {
+   "name": "recording",
+   "key": "recording"
+  },
+  {
+   "name": "processing",
+   "key": "proc"
+  },
+  {
+   "name": "space",
+   "key": "space"
+  },
+  {
+   "name": "split",
+   "key": "split"
+  },
+  {
+   "name": "resolution",
+   "key": "res"
+  },
+  {
+   "name": "density",
+   "key": "den"
+  },
+  {
+   "name": "label",
+   "key": "label"
+  },
+  {
+   "name": "description",
+   "key": "desc"
+  }
+ ],
+ "topLevel": [
+  {
+   "name": "README",
+   "required": true,
+   "extensions": [
+    ""
+   ]
+  },
+  {
+   "name": "CHANGES",
+   "required": true,
+   "extensions": [
+    ""
+   ]
+  },
+  {
+   "name": "LICENSE",
+   "required": false,
+   "extensions": [
+    ""
+   ]
+  },
+  {
+   "name": "dataset_description",
+   "required": true,
+   "extensions": [
+    ".json"
+   ]
+  },
+  {
+   "name": "genetic_info",
+   "required": false,
+   "extensions": [
+    ".json"
+   ]
+  },
+  {
+   "name": "participants",
+   "required": false,
+   "extensions": [
+    ".tsv",
+    ".json"
+   ]
+  }
+ ],
+ "files": [
+  {
+   "datatypes": [
+    "anat"
+   ],
+   "suffixes": [
+    "T1w",
+    "T2w",
+    "PDw",
+    "T2starw",
+    "FLAIR",
+    "inplaneT1",
+    "inplaneT2",
+    "PDT2",
+    "angio",
+    "T2star",
+    "FLASH",
+    "PD"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "run": "optional",
+    "acquisition": "optional",
+    "ceagent": "optional",
+    "reconstruction": "optional",
+    "part": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "anat"
+   ],
+   "suffixes": [
+    "T1map",
+    "T2map",
+    "T2starmap",
+    "R1map",
+    "R2map",
+    "R2starmap",
+    "PDmap",
+    "MTRmap",
+    "MTsat",
+    "UNIT1",
+    "T1rho",
+    "MWFmap",
+    "MTVmap",
+    "PDT2map",
+    "Chimap",
+    "S0map",
+    "M0map"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "run": "optional",
+    "acquisition": "optional",
+    "ceagent": "optional",
+    "reconstruction": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "anat"
+   ],
+   "suffixes": [
+    "defacemask"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "run": "optional",
+    "acquisition": "optional",
+    "ceagent": "optional",
+    "reconstruction": "optional",
+    "modality": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "anat"
+   ],
+   "suffixes": [
+    "MESE",
+    "MEGRE"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "run": "optional",
+    "acquisition": "optional",
+    "ceagent": "optional",
+    "reconstruction": "optional",
+    "echo": "required",
+    "part": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "anat"
+   ],
+   "suffixes": [
+    "VFA"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "run": "optional",
+    "acquisition": "optional",
+    "ceagent": "optional",
+    "reconstruction": "optional",
+    "flip": "required",
+    "part": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "anat"
+   ],
+   "suffixes": [
+    "IRT1"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "run": "optional",
+    "acquisition": "optional",
+    "ceagent": "optional",
+    "reconstruction": "optional",
+    "inversion": "required",
+    "part": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "anat"
+   ],
+   "suffixes": [
+    "MP2RAGE"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "run": "optional",
+    "acquisition": "optional",
+    "ceagent": "optional",
+    "reconstruction": "optional",
+    "echo": "optional",
+    "flip": "optional",
+    "inversion": "required",
+    "part": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "anat"
+   ],
+   "suffixes": [
+    "MPM",
+    "MTS"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "run": "optional",
+    "acquisition": "optional",
+    "ceagent": "optional",
+    "reconstruction": "optional",
+    "echo": "optional",
+    "flip": "required",
+    "mtransfer": "required",
+    "part": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "anat"
+   ],
+   "suffixes": [
+    "MTR"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "run": "optional",
+    "acquisition": "optional",
+    "ceagent": "optional",
+    "reconstruction": "optional",
+    "mtransfer": "required",
+    "part": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "beh"
+   ],
+   "suffixes": [
+    "stim",
+    "physio"
+   ],
+   "extensions": [
+    ".tsv.gz",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "task": "required",
+    "acquisition": "optional",
+    "run": "optional",
+    "recording": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "beh"
+   ],
+   "suffixes": [
+    "events",
+    "beh"
+   ],
+   "extensions": [
+    ".tsv",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "task": "required",
+    "acquisition": "optional",
+    "run": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "dwi"
+   ],
+   "suffixes": [
+    "dwi"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json",
+    ".bvec",
+    ".bval"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "acquisition": "optional",
+    "direction": "optional",
+    "run": "optional",
+    "part": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "dwi"
+   ],
+   "suffixes": [
+    "sbref"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "acquisition": "optional",
+    "direction": "optional",
+    "run": "optional",
+    "part": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "eeg"
+   ],
+   "suffixes": [
+    "eeg"
+   ],
+   "extensions": [
+    ".json",
+    ".edf",
+    ".vhdr",
+    ".vmrk",
+    ".eeg",
+    ".set",
+    ".fdt",
+    ".bdf"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "task": "required",
+    "acquisition": "optional",
+    "run": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "eeg"
+   ],
+   "suffixes": [
+    "channels"
+   ],
+   "extensions": [
+    ".json",
+    ".tsv"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "task": "required",
+    "acquisition": "optional",
+    "run": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "eeg"
+   ],
+   "suffixes": [
+    "coordsystem"
+   ],
+   "extensions": [
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "acquisition": "optional",
+    "space": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "eeg"
+   ],
+   "suffixes": [
+    "electrodes"
+   ],
+   "extensions": [
+    ".json",
+    ".tsv"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "acquisition": "optional",
+    "space": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "eeg"
+   ],
+   "suffixes": [
+    "events"
+   ],
+   "extensions": [
+    ".json",
+    ".tsv"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "task": "required",
+    "acquisition": "optional",
+    "run": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "eeg"
+   ],
+   "suffixes": [
+    "photo"
+   ],
+   "extensions": [
+    ".jpg"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "acquisition": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "fmap"
+   ],
+   "suffixes": [
+    "phasediff",
+    "phase1",
+    "phase2",
+    "magnitude1",
+    "magnitude2",
+    "magnitude",
+    "fieldmap"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "acquisition": "optional",
+    "run": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "fmap"
+   ],
+   "suffixes": [
+    "epi",
+    "m0scan"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "acquisition": "optional",
+    "ceagent": "optional",
+    "direction": "required",
+    "run": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "fmap"
+   ],
+   "suffixes": [
+    "TB1DAM"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "run": "optional",
+    "acquisition": "optional",
+    "ceagent": "optional",
+    "reconstruction": "optional",
+    "flip": "required",
+    "inversion": "optional",
+    "part": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "fmap"
+   ],
+   "suffixes": [
+    "TB1EPI"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "run": "optional",
+    "acquisition": "optional",
+    "ceagent": "optional",
+    "reconstruction": "optional",
+    "echo": "required",
+    "flip": "required",
+    "inversion": "optional",
+    "part": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "fmap"
+   ],
+   "suffixes": [
+    "TB1AFI",
+    "TB1TFL",
+    "TB1RFM",
+    "RB1COR"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "run": "optional",
+    "acquisition": "optional",
+    "ceagent": "optional",
+    "reconstruction": "optional",
+    "echo": "optional",
+    "flip": "optional",
+    "inversion": "optional",
+    "part": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "fmap"
+   ],
+   "suffixes": [
+    "TB1SRGE"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "run": "optional",
+    "acquisition": "optional",
+    "ceagent": "optional",
+    "reconstruction": "optional",
+    "echo": "optional",
+    "flip": "required",
+    "inversion": "required",
+    "part": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "fmap"
+   ],
+   "suffixes": [
+    "TB1map",
+    "RB1map"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "run": "optional",
+    "acquisition": "optional",
+    "ceagent": "optional",
+    "reconstruction": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "func"
+   ],
+   "suffixes": [
+    "bold",
+    "cbv",
+    "sbref"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "task": "required",
+    "acquisition": "optional",
+    "ceagent": "optional",
+    "reconstruction": "optional",
+    "direction": "optional",
+    "run": "optional",
+    "echo": "optional",
+    "part": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "func"
+   ],
+   "suffixes": [
+    "phase"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "task": "required",
+    "acquisition": "optional",
+    "ceagent": "optional",
+    "reconstruction": "optional",
+    "direction": "optional",
+    "run": "optional",
+    "echo": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "func"
+   ],
+   "suffixes": [
+    "events"
+   ],
+   "extensions": [
+    ".tsv",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "task": "required",
+    "acquisition": "optional",
+    "ceagent": "optional",
+    "reconstruction": "optional",
+    "direction": "optional",
+    "run": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "func"
+   ],
+   "suffixes": [
+    "physio",
+    "stim"
+   ],
+   "extensions": [
+    ".tsv.gz",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "task": "required",
+    "acquisition": "optional",
+    "ceagent": "optional",
+    "reconstruction": "optional",
+    "direction": "optional",
+    "run": "optional",
+    "recording": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "ieeg"
+   ],
+   "suffixes": [
+    "ieeg"
+   ],
+   "extensions": [
+    ".mefd/",
+    ".json",
+    ".edf",
+    ".vhdr",
+    ".eeg",
+    ".vmrk",
+    ".set",
+    ".fdt",
+    ".nwb"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "task": "required",
+    "acquisition": "optional",
+    "run": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "ieeg"
+   ],
+   "suffixes": [
+    "channels"
+   ],
+   "extensions": [
+    ".json",
+    ".tsv"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "task": "required",
+    "acquisition": "optional",
+    "run": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "ieeg"
+   ],
+   "suffixes": [
+    "coordsystem"
+   ],
+   "extensions": [
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "acquisition": "optional",
+    "space": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "ieeg"
+   ],
+   "suffixes": [
+    "electrodes"
+   ],
+   "extensions": [
+    ".json",
+    ".tsv"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "acquisition": "optional",
+    "space": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "ieeg"
+   ],
+   "suffixes": [
+    "events"
+   ],
+   "extensions": [
+    ".json",
+    ".tsv"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "task": "required",
+    "acquisition": "optional",
+    "run": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "ieeg"
+   ],
+   "suffixes": [
+    "photo"
+   ],
+   "extensions": [
+    ".jpg"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "acquisition": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "meg"
+   ],
+   "suffixes": [
+    "meg"
+   ],
+   "extensions": [
+    "/",
+    ".ds/",
+    ".json",
+    ".fif",
+    ".sqd",
+    ".con",
+    ".raw",
+    ".ave",
+    ".mrk",
+    ".kdf",
+    ".mhd"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "task": "required",
+    "acquisition": "optional",
+    "run": "optional",
+    "processing": "optional",
+    "split": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "meg"
+   ],
+   "suffixes": [
+    "headshape"
+   ],
+   "extensions": [
+    "*"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "acquisition": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "meg"
+   ],
+   "suffixes": [
+    "markers"
+   ],
+   "extensions": [
+    ".sqd",
+    ".mrk"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "task": "optional",
+    "acquisition": "optional",
+    "space": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "meg"
+   ],
+   "suffixes": [
+    "coordsystem"
+   ],
+   "extensions": [
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "acquisition": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "meg"
+   ],
+   "suffixes": [
+    "channels"
+   ],
+   "extensions": [
+    ".json",
+    ".tsv"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "task": "required",
+    "acquisition": "optional",
+    "run": "optional",
+    "processing": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "meg"
+   ],
+   "suffixes": [
+    "events"
+   ],
+   "extensions": [
+    ".json",
+    ".tsv"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "task": "required",
+    "acquisition": "optional",
+    "run": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "meg"
+   ],
+   "suffixes": [
+    "photo"
+   ],
+   "extensions": [
+    ".jpg"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "acquisition": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "perf"
+   ],
+   "suffixes": [
+    "asl",
+    "m0scan"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "acquisition": "optional",
+    "reconstruction": "optional",
+    "direction": "optional",
+    "run": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "perf"
+   ],
+   "suffixes": [
+    "aslcontext"
+   ],
+   "extensions": [
+    ".tsv",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "acquisition": "optional",
+    "reconstruction": "optional",
+    "direction": "optional",
+    "run": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "perf"
+   ],
+   "suffixes": [
+    "asllabeling"
+   ],
+   "extensions": [
+    ".jpg"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "acquisition": "optional",
+    "reconstruction": "optional",
+    "run": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "pet"
+   ],
+   "suffixes": [
+    "pet"
+   ],
+   "extensions": [
+    ".nii.gz",
+    ".nii",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "task": "optional",
+    "tracer": "optional",
+    "reconstruction": "optional",
+    "run": "optional"
+   }
+  },
+  {
+   "datatypes": [
+    "pet"
+   ],
+   "suffixes": [
+    "blood"
+   ],
+   "extensions": [
+    ".tsv",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "task": "optional",
+    "tracer": "optional",
+    "reconstruction": "optional",
+    "run": "optional",
+    "recording": "required"
+   }
+  },
+  {
+   "datatypes": [
+    "pet"
+   ],
+   "suffixes": [
+    "events"
+   ],
+   "extensions": [
+    ".tsv",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional",
+    "task": "required",
+    "tracer": "optional",
+    "reconstruction": "optional",
+    "run": "optional"
+   }
+  },
+  {
+   "datatypes": [],
+   "suffixes": [
+    "scans"
+   ],
+   "extensions": [
+    ".tsv",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required",
+    "session": "optional"
+   }
+  },
+  {
+   "datatypes": [],
+   "suffixes": [
+    "sessions"
+   ],
+   "extensions": [
+    ".tsv",
+    ".json"
+   ],
+   "entities": {
+    "subject": "required"
+   }
+  }
+ ]
+}

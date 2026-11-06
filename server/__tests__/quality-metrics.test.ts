@@ -142,34 +142,68 @@ describe('resolveDatasetPaths', () => {
     expect(() => resolveDatasetPaths(FIXTURES, 'a/b')).toThrow(/Invalid dataset name/);
   });
 
-  it('uses physprep/ and fmriprep/ when the dataset root is not BIDS itself', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'quality-paths-'));
-    mkdirSync(join(dir, 'shinobi', 'physprep'), { recursive: true });
-    mkdirSync(join(dir, 'shinobi', 'fmriprep'), { recursive: true });
-    expect(resolveDatasetPaths(dir, 'shinobi')).toEqual({
-      dataset: 'shinobi',
-      bidsRoot: join(dir, 'shinobi', 'physprep'),
-      derivRoot: join(dir, 'shinobi', 'fmriprep'),
+  it('passes explicit main, physio and derivatives folders through (sibling layout)', () => {
+    // e.g. friends: main BIDS in data/, physio and derivatives next to it
+    const p = resolveDatasetPaths(FIXTURES, 'friends', {
+      bidsRoot: '/ds/friends/friends',
+      physioRoot: '/ds/friends/physprep',
+      derivRoot: '/ds/friends/fmriprep',
     });
-    rmSync(dir, { recursive: true, force: true });
+    expect(p).toMatchObject({
+      dataset: 'friends',
+      bidsRoot: '/ds/friends/friends',
+      physioRoot: '/ds/friends/physprep',
+      derivRoot: '/ds/friends/fmriprep',
+    });
   });
 
-  it('gives the dev server the same roots for the dataset folder or its physprep/', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'quality-roots-'));
-    mkdirSync(join(dir, 'shinobi', 'physprep'), { recursive: true });
-    mkdirSync(join(dir, 'shinobi', 'fmriprep'), { recursive: true });
-    const expected = { bidsRoot: join(dir, 'shinobi', 'physprep'), derivRoot: join(dir, 'shinobi', 'fmriprep') };
-    expect(resolveBidsRoots(join(dir, 'shinobi'))).toEqual(expected);
-    expect(resolveBidsRoots(join(dir, 'shinobi', 'physprep'))).toEqual(expected);
+  it('gives the dev server the same roots', () => {
+    const root = join(FIXTURES, 'bids-sessions');
+    expect(resolveDatasetPaths(FIXTURES, 'bids-sessions')).toEqual({
+      dataset: 'bids-sessions',
+      ...resolveBidsRoots(root),
+    });
     // an explicit derivatives root wins
-    expect(resolveBidsRoots(join(dir, 'shinobi'), '/elsewhere').derivRoot).toBe('/elsewhere');
-    rmSync(dir, { recursive: true, force: true });
+    expect(resolveBidsRoots(root, { derivRoot: '/elsewhere' }).derivRoot).toBe('/elsewhere');
   });
 
-  it('defaults to <root>/derivatives/fmriprep for plain BIDS', () => {
+  it('defaults to <root>/derivatives/fmriprep and physio in the main folder for plain BIDS', () => {
     const p = resolveDatasetPaths(FIXTURES, 'bids-sessions');
     expect(p.bidsRoot).toBe(join(FIXTURES, 'bids-sessions'));
+    expect(p.physioRoot).toBe(join(FIXTURES, 'bids-sessions'));
     expect(p.derivRoot).toBe(join(FIXTURES, 'bids-sessions', 'derivatives', 'fmriprep'));
+  });
+});
+
+describe('runQualityMetrics (physio in a separate folder)', () => {
+  it('computes scans from the physio root and dataset info from the main folder', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'quality-physio-root-'));
+    const src = join(FIXTURES, 'bids-nosessions');
+    const main = join(dir, 'main');
+    const phys = join(dir, 'phys');
+    const copy = (rel: string, to: string) => {
+      mkdirSync(join(to, rel, '..'), { recursive: true });
+      writeFileSync(join(to, rel), readFileSync(join(src, rel)));
+    };
+    for (const rel of ['dataset_description.json', 'task-motor_bold.json']) copy(rel, main);
+    for (const rel of [
+      'physio.json',
+      'sub-01/sub-01_task-motor_physio.json',
+      'sub-01/func/sub-01_task-motor_physio.tsv.gz',
+      'sub-02/func/sub-02_task-motor_physio.tsv.gz',
+    ]) {
+      copy(rel, phys);
+    }
+    const { summary } = runQualityMetrics({
+      dataDir: dir,
+      dataset: 'main',
+      outRoot: out,
+      bidsRoot: main,
+      physioRoot: phys,
+    });
+    expect(summary.nScans).toBe(2);
+    expect(summary.info.name).toBe('Synthetic physio fixture (no sessions)');
+    rmSync(dir, { recursive: true, force: true });
   });
 });
 

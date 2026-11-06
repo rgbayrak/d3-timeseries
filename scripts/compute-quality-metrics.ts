@@ -4,18 +4,25 @@
 //
 //   npx vite-node scripts/compute-quality-metrics.ts -- <dataset> [options]
 //
-//   <dataset>              folder name under data/ (e.g. ds006644, shinobi)
-//   --bids-root <path>     raw BIDS folder (default: data/<dataset>, or data/<dataset>/physprep)
-//   --deriv-root <path>    fMRIPrep derivatives (default: <bids-root>/derivatives/fmriprep or data/<dataset>/fmriprep)
+//   <dataset>              folder name under data/ (e.g. ds006644, friends)
+//   --bids-root <path>     main BIDS folder (default: data/<dataset>)
+//   --physio-root <path>   folder holding the physio files, when stored outside the main folder
+//                          (default: the main folder, or the folder inside it that has *_physio.tsv.gz)
+//   --deriv-root <path>    derivatives folder with the confounds, when stored outside <bids-root>/derivatives/
+//                          (default: the folder inside <bids-root>/derivatives/ that has confounds files)
 //   --out <path>           output root (default: data/quality)
 
 import { join, resolve } from 'path';
-import { runQualityMetrics } from '../server/quality-metrics';
+import { runQualityMetrics, resolveDatasetPaths } from '../server/quality-metrics';
+import { countPhysioFiles } from '../server/availability';
+import { appendQualityRun } from '../server/quality-run-log';
+import { localTimestamp, notDownloaded } from '../src/quality/run-log';
 
-const USAGE = 'Usage: compute-quality-metrics <dataset> [--bids-root <path>] [--deriv-root <path>] [--out <path>]';
+const USAGE =
+  'Usage: compute-quality-metrics <dataset> [--bids-root <path>] [--physio-root <path>] [--deriv-root <path>] [--out <path>]';
 
 function parseArgs(argv: string[]) {
-  const opts: { dataset?: string; bidsRoot?: string; derivRoot?: string; out?: string } = {};
+  const opts: { dataset?: string; bidsRoot?: string; physioRoot?: string; derivRoot?: string; out?: string } = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const value = () => {
@@ -27,6 +34,7 @@ function parseArgs(argv: string[]) {
       console.log(USAGE);
       process.exit(0);
     } else if (a === '--bids-root') opts.bidsRoot = value();
+    else if (a === '--physio-root') opts.physioRoot = value();
     else if (a === '--deriv-root') opts.derivRoot = value();
     else if (a === '--out') opts.out = value();
     else if (a.startsWith('-')) throw new Error(`Unknown option ${a}\n${USAGE}`);
@@ -40,11 +48,14 @@ function parseArgs(argv: string[]) {
 try {
   const args = parseArgs(process.argv.slice(2).filter((a) => a !== '--'));
   const started = Date.now();
+  const runDate = localTimestamp();
+  const dataDir = join(process.cwd(), 'data');
   const result = runQualityMetrics({
-    dataDir: join(process.cwd(), 'data'),
+    dataDir,
     dataset: args.dataset,
     outRoot: args.out,
     bidsRoot: args.bidsRoot,
+    physioRoot: args.physioRoot,
     derivRoot: args.derivRoot,
     log: (msg) => console.log(msg),
   });
@@ -52,6 +63,26 @@ try {
   console.log(
     `Done in ${((Date.now() - started) / 1000).toFixed(1)} s: ${nScans} scans, ${nSubjects} subjects` +
       (failedScans.length ? `, ${failedScans.length} failed (listed in dataset.json)` : ''),
+  );
+
+  // Run log: one line per run in quality_runs.tsv, next to the metrics (read by the Stats tab)
+  const { physioRoot } = resolveDatasetPaths(dataDir, args.dataset, {
+    bidsRoot: args.bidsRoot,
+    physioRoot: args.physioRoot,
+    derivRoot: args.derivRoot,
+  });
+  const available = countPhysioFiles(physioRoot);
+  const run = {
+    runDate,
+    scansComputed: nScans,
+    scansAvailable: available.onDisk,
+    scansFailed: failedScans.length,
+    countSource: available.source,
+  };
+  const logPath = appendQualityRun(result.outDir, run);
+  console.log(
+    `Coverage: ${nScans} of ${available.onDisk} scans (${notDownloaded(run)} not downloaded, ` +
+      `${failedScans.length} failed; counted with ${available.source}). Logged in ${logPath}`,
   );
   console.log(
     'The PDF report (quality_report.pdf) is built and saved next to these files the next time the Stats tab opens (npm run dev).',

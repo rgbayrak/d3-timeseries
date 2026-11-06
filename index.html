@@ -52,7 +52,8 @@
       gap: 8px;
     }
 
-    /* Rows: 1 = scan/channel pickers, 2 = auxiliary (stack + confound), 3 = navigation + search */
+    /* Rows: 1 = scan/channel pickers, 2 = auxiliary (events, confound, stack),
+       3 = navigation + search */
     .controls-row {
       display: flex;
       align-items: center;
@@ -69,6 +70,26 @@
 
     #search-input {
       width: 120px;
+    }
+
+    /* TRIAL peaks toggle: the key's swatches match the dots (src/viewer/charts/peaks-trial.ts) */
+    #controls .peaks-toggle {
+      cursor: pointer;
+      user-select: none;
+      gap: 8px;
+    }
+
+    /* Two classes, so these win over the plain .swatch rule further down */
+    .swatch.peak-swatch {
+      background: #466eb4;
+      width: 6px;
+      height: 6px;
+    }
+
+    .swatch.peak-corrected-swatch {
+      background: transparent;
+      border: 1.5px solid #1a9850;
+      box-sizing: border-box;
     }
 
     #loading {
@@ -110,7 +131,7 @@
       }
     }
 
-    /* Scatter plot of two metrics across all recordings, full width below the charts and Annotations */
+    /* Scatter plot of two metrics across all recordings of the channel shown, full width below the charts and Annotations */
     /* One text style for everything in this section under its heading: description,
        menu labels, dropdowns, legend and the "n of N scans plotted" note */
     #scatter-section {
@@ -138,7 +159,7 @@
       border-radius: 1px;
     }
 
-    #scatter-section h3 {
+    #scatter-section h2 {
       margin: 0 0 8px;
     }
 
@@ -156,26 +177,62 @@
       gap: 4px;
     }
 
+    /* Plot on the left, its key on the right (below it on narrow screens) */
+    .scatter-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: start;
+    }
+
     #scatter-chart {
       width: 100%;
     }
 
-    /* Legend and "n of N scans plotted", right under the plot's description */
-    /* Colour legend and "n of N scans plotted", in the menu row right after Colour by,
-       set off by a thin line so it reads as that menu's key */
+    /* "n of N scans plotted", then the colour legend, set off from the plot by a thin line */
     .scatter-key {
       display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 6px 16px;
+      flex-direction: column;
+      gap: 8px;
       padding-left: 16px;
       border-left: 1px solid #ddd;
+      max-height: 420px; /* the plot's height (src/quality/charts.ts) */
+      overflow: auto;
     }
 
+    .scatter-key:has(#scatter-legend:empty):has(#scatter-note:empty) {
+      display: none;
+    }
+
+    /* Groups stacked, each one a column of "● value" that wraps into more columns when long */
     #scatter-legend {
       display: flex;
-      gap: 6px 18px;
-      flex-wrap: wrap;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    #scatter-legend .legend-group {
+      display: grid;
+      grid-template-rows: repeat(16, auto);
+      grid-auto-flow: column;
+      gap: 0 16px;
+      justify-items: start;
+    }
+
+    #scatter-legend .legend-group > * {
+      padding: 2px 0;
+    }
+
+    @media (max-width: 700px) {
+      .scatter-body {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .scatter-key {
+        padding-left: 0;
+        border-left: none;
+        max-height: none;
+      }
     }
 
     /* "Session: ● 01 ● 02": what the colours mean, then each group */
@@ -191,15 +248,15 @@
       color: inherit;
     }
 
-    /* The viewed scan's point, set apart from the groups */
-    .legend-viewed {
-      padding-left: 18px;
-      border-left: 1px solid #ddd;
+    /* The viewed scan's point, set apart from the groups above it */
+    #scatter-legend .legend-viewed {
+      padding-top: 8px;
+      border-top: 1px solid #ddd;
     }
 
-    .legend-group:first-child.legend-viewed {
-      padding-left: 0;
-      border-left: none;
+    #scatter-legend .legend-group:first-child.legend-viewed {
+      padding-top: 0;
+      border-top: none;
     }
 
     #scatter-legend:empty {
@@ -348,8 +405,9 @@
       color: #d00;
     }
 
-    /* Section labels above the main channel and the auxiliary charts (lettering from tabs.css) */
-    .section-label {
+    /* Sub-titles above the main channel and the auxiliary charts: parts of the
+       INTERACTIVE QUALITY ASSESSMENT TOOL section (sub-title style from tabs.css) */
+    .subsection-label {
       max-width: var(--page-width);
       margin: 0 auto 6px;
     }
@@ -359,8 +417,8 @@
       margin: 12px auto 0;
     }
 
-    /* Short divider line before every section but the first, same as the Stats tabs (quality.html h3::before) */
-    #auxiliary-section .section-label::before {
+    /* Short divider line between the two parts, same as between the Stats sections (quality.html h3::before) */
+    #auxiliary-section .subsection-label::before {
       content: '';
       display: block;
       width: 48px;
@@ -375,8 +433,38 @@
       margin: 0 auto;
     }
 
-    #stack-section:not([style*="none"]) + #confounds-section {
+    #stack-section:not([style*="none"]) + #events-section,
+    #stack-section:not([style*="none"]) ~ #confounds-section,
+    #events-section:not([style*="none"]) + #confounds-section {
       margin-top: 12px;
+    }
+
+    /* Task events: file name, colour key, then the time-locked blocks */
+    #events-section {
+      max-width: var(--page-width);
+      margin: 0 auto;
+    }
+
+    #events-file-label {
+      margin-bottom: 4px;
+    }
+
+    /* Colour key in the same text as the file name above it */
+    #events-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 18px;
+      margin-bottom: 4px;
+      font-size: var(--fs-md);
+      color: var(--text);
+    }
+
+    #events-legend:empty {
+      display: none;
+    }
+
+    #events-chart {
+      max-width: var(--page-width);
     }
 
     /* Confounds file name: same look as the scan file name (.now-viewing-file) */
@@ -388,12 +476,38 @@
       max-width: var(--page-width);
     }
 
-    /* Stacked channel picker (controls row) */
-    /* Auxiliary row: "Auxiliary Signal Options:", then Confound, then Stack,
+    /* Auxiliary row: "Auxiliary Signal Options:", then Event, Confound and Stack,
        in the same text as the other control labels (Subject, Channel, …) */
     .aux-title {
       font-size: var(--fs-lg);
       color: var(--text);
+    }
+
+    /* "On Disk Data Summary": a box under the Annotations box, same box as it
+       and the Stats tab's Metrics shown box, in the same text as the control labels */
+    .dataset-summary {
+      box-sizing: border-box;
+      margin-top: 16px;
+      padding: 12px 14px 14px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: var(--fs-lg);
+      color: var(--text);
+    }
+
+    .dataset-summary h3 {
+      margin: 0 0 6px;
+    }
+
+    #dataset-summary-lines {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    /* "INTERACTIVE QUALITY ASSESSMENT TOOL", the heading of the dropdowns */
+    #controls .tool-title {
+      margin: 0;
     }
 
     .aux-item {
@@ -436,16 +550,24 @@
   </nav>
   <div id="dataset-info" class="dataset-header"></div>
   <div id="controls">
+    <h3 class="tool-title">INTERACTIVE QUALITY ASSESSMENT TOOL</h3>
     <div class="controls-row">
       <label>Subject <select id="subject-select"></select></label>
       <label>Session <select id="session-select"></select></label>
       <label>Task <select id="task-select"></select></label>
       <label id="run-label" style="display:none">Run <select id="run-select"></select></label>
       <label>Channel <select id="channel-select"></select></label>
+      <!-- TRIAL: peaks from a physprep-style events file, shown only when the channel has some (src/viewer/peaks-trial.ts) -->
+      <label id="peaks-label" class="peaks-toggle" style="display:none">
+        <input type="checkbox" id="peaks-toggle"> Peaks (trial)
+        <span class="legend-item"><span class="swatch peak-swatch"></span>detected</span>
+        <span class="legend-item"><span class="swatch peak-corrected-swatch"></span>corrected</span>
+      </label>
     </div>
     <!-- What the Auxiliary charts below show; each part, and the row, hides when there is nothing to pick -->
     <div class="controls-row" id="aux-row" style="display:none">
       <span class="aux-title">Auxiliary Signal Options:</span>
+      <label id="events-label" class="aux-item" style="display:none">Event <select id="events-select"></select></label>
       <label id="confound-label" class="aux-item" style="display:none">Confound <select id="confound-select"></select></label>
       <span id="stack-row" class="aux-item" style="display:none">
         <span class="stack-title">Stack</span>
@@ -464,13 +586,18 @@
   <!-- Charts (3/4) on the left, Annotations (1/4) on the right; stacked left then right on narrow screens -->
   <div class="explore-layout">
   <div class="explore-main">
-  <div class="section-label">Signal of interest</div>
+  <div class="subsection-label">SIGNAL OF INTEREST</div>
   <div id="focus-chart"></div>
   <div id="context-chart"></div>
-  <!-- Stacked channels and the confound; shown when either is (see src/viewer/main.ts) -->
+  <!-- Stacked channels, task events and the confound; shown when any is (see src/viewer/main.ts) -->
   <div id="auxiliary-section" style="display:none;">
-    <div class="section-label">Auxiliary</div>
+    <div class="subsection-label">AUXILIARY</div>
     <div id="stack-section" style="display:none;"></div>
+    <div id="events-section" style="display:none;">
+      <div id="events-file-label" class="now-viewing-file"></div>
+      <div id="events-legend"></div>
+      <div id="events-chart"></div>
+    </div>
     <div id="confounds-section" style="display:none;">
       <div id="confounds-label" class="now-viewing-file"></div>
       <div id="confounds-chart"></div>
@@ -520,24 +647,31 @@
       </div>
     </div>
   </section>
+  <!-- Downloaded recordings and quality metrics coverage (src/viewer/info.ts); hidden until something is known -->
+  <section id="dataset-summary" class="dataset-summary" aria-labelledby="dataset-summary-title" style="display:none">
+    <h3 id="dataset-summary-title">On disk data summary</h3>
+    <div id="dataset-summary-lines"></div>
+  </section>
   </aside>
   </div>
 
   <!-- Every recording of one channel; shown only when the dataset's quality metrics are computed (src/viewer/main.ts) -->
   <section id="scatter-section" style="display:none" aria-labelledby="scatter-title">
-    <h3 id="scatter-title">Compare two metrics across all recordings</h3>
+    <h2 id="scatter-title">Compare two metrics across all <span id="scatter-channel" class="channel-name"></span> recordings</h2>
     <div class="muted">One point per recording of the channel chosen at the top of the page. X can also be a participant variable (age, sex, …) from participants.tsv. Hover a point for details; double-click it to open that scan in Stats.</div>
-    <!-- Menus, then right next to Colour by its colour legend and how many scans are plotted -->
     <div class="scatter-controls">
       <label>Y <select id="scatter-y"></select></label>
       <label>X <select id="scatter-x"></select></label>
       <label>Colour by <select id="scatter-color"></select></label>
+    </div>
+    <!-- The plot, with how many scans are plotted and the colour legend to its right -->
+    <div class="scatter-body">
+      <div id="scatter-chart"></div>
       <div class="scatter-key">
-        <div id="scatter-legend" aria-label="Colour legend"></div>
         <div id="scatter-note" class="muted"></div>
+        <div id="scatter-legend" aria-label="Colour legend"></div>
       </div>
     </div>
-    <div id="scatter-chart"></div>
   </section>
   <script type="module" src="/src/main.ts"></script>
 </body>

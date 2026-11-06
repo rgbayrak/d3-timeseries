@@ -7,7 +7,7 @@ tests and CI (passing on GitHub) are done (see the testing section in
 `paper/paper.md`).
 
 - [ ] Add `npm run build` to CI once the production build is in use (Phase 2)
-- [ ] Tests for the chart library core (`createChart`, zoom, brush, `cullToViewport`, `downsample`) under jsdom (needs `jsdom` as a dev dependency)
+- [ ] Tests for the chart library core (`createChart`, zoom, brush, `cullToViewport`, `downsample`) under jsdom (needs `jsdom` as a dev dependency). The axis helpers (tick count, tick format, y-axis title position) are already tested without it
 
 
 ## Phase 2 — Run outside the Vite dev server
@@ -42,7 +42,10 @@ Today the server only runs as a Vite dev-mode plugin; reviewers must be able to 
 - [ ] Date (title, tags, authors, ORCIDs and affiliations set)
 - [x] **Summary** for a non-specialist audience. Drafted; needs your review
 - [x] **Statement of need**: the research problem and target users. Drafted; needs your review
-- [x] **Software design**: add the standalone server and launch command once Phase 2 lands
+- [x] **Software design**: drafted
+- [ ] Software design: add the standalone server and launch command once Phase 2 lands
+- [ ] Bring the Software design section up to date with the tool: it says "three key components" but lists four; "Group and Individual tabs" are now the scatter plot at the bottom of Explore and Annotate and the Stats tab; the BIDS reader also finds MRIQC confounds and task events (not only fMRIPrep); the "signal quality table" in the viewer was removed. Mention the newer features where they fit (task events chart, On disk data summary, quality metrics run log)
+- [ ] Software testing section: add task events, MRIQC confounds, downloaded-file counts and the run log to the list
 - [ ] **Research use**: add labs tested the tool (TODO comment in the paper)
 - [ ] Metric citations: resolve the open items in `REVIEW.md` (ApEn attribution, missing PaPaGei and Romano 2023 references in `paper.bib`) before the paper cites the metrics
 - [ ] Acknowledgements and funding

@@ -16,7 +16,7 @@ export function viewerScan(datasetName: string | null, store?: Storage | null): 
 
 /**
  * Make Explore and Annotate open `scan` next time. Keeps the viewer's channel,
- * confound and stacked channels; the viewer falls back to its defaults if they
+ * confound, events column and stacked channels; the viewer falls back to its defaults if they
  * don't exist for this scan.
  */
 export function shareScanWithViewer(datasetName: string | null, scan: ScanKeyLike, store?: Storage | null): void {
@@ -31,6 +31,7 @@ export function shareScanWithViewer(datasetName: string | null, scan: ScanKeyLik
       run: scan.run,
       channel: prev?.channel ?? '',
       confound: prev?.confound ?? '',
+      event: prev?.event ?? '',
       stacked: prev?.stacked ?? [],
     },
     store,

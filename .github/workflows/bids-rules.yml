@@ -1,0 +1,36 @@
+name: BIDS rules
+
+# Weekly: add a rules file (server/schema-rules/) for any new BIDS release in
+# github.com/bids-standard/bids-schema, and open a pull request when one was added.
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Add rules for new BIDS releases
+        run: npx vite-node scripts/update-bids-rules.ts
+
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          branch: bids-rules-update
+          title: Add BIDS rules for new releases
+          commit-message: Add BIDS rules for new releases
+          body: New BIDS release(s) found in bids-standard/bids-schema; rules written by `scripts/update-bids-rules.ts`.
+          add-paths: server/schema-rules/*.json
