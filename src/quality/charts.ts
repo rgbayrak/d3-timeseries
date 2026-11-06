@@ -1,6 +1,6 @@
 import { area } from 'd3-shape';
 import type { ScaleLinear } from 'd3-scale';
-import { createChart } from '@/core';
+import { createChart, compactNumber } from '@/core';
 import type { ChartInstance } from '@/core';
 import { drawOnsetMarker } from '@/viewer/charts/shared';
 import { histogramBins, finiteMean, paddedExtent } from './stats';
@@ -97,12 +97,8 @@ function scaleToFit(chart: ChartInstance): void {
   chart.getLayers().svg.attr('viewBox', `0 0 ${d.outerWidth} ${d.outerHeight}`);
 }
 
-const shortNumber = (d: unknown) => {
-  const v = Number(d);
-  const a = Math.abs(v);
-  if (a !== 0 && (a >= 1e5 || a < 1e-3)) return v.toExponential(1);
-  return String(Number(v.toPrecision(4)));
-};
+// Same short tick labels as every other chart (src/core/axes.ts)
+const shortNumber = compactNumber;
 
 // ── Scatter ──────────────────────────────────────────────
 
